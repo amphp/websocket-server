@@ -1,0 +1,57 @@
+{
+    "name": "amphp/websocket-server",
+    "homepage": "https://github.com/amphp/websocket-server",
+    "description": "Websocket server for Amp's HTTP server.",
+    "keywords": [
+        "http",
+        "server",
+        "websocket"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Daniel Lowrey",
+            "email": "rdlowrey@php.net"
+        },
+        {
+            "name": "Bob Weinand"
+        },
+        {
+            "name": "Niklas Keller",
+            "email": "me@kelunik.com"
+        },
+        {
+            "name": "Aaron Piotrowski",
+            "email": "aaron@trowski.com"
+        }
+    ],
+    "require": {
+        "amphp/amp": "^2.0.3",
+        "amphp/http": "^1",
+        "amphp/http-server": "dev-master as 0.8.0",
+        "amphp/socket": "^0.10.5"
+    },
+    "require-dev": {
+        "amphp/phpunit-util": "^1",
+        "friendsofphp/php-cs-fixer": "^2.3",
+        "league/climate": "^3",
+        "league/uri-schemes": "^1.1",
+        "phpunit/phpunit": "^6",
+        "infection/infection": "^0.7.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Amp\\Http\\Server\\Websocket\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Amp\\Http\\Server\\Websocket\\Test\\": "test"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.0.13"
+        }
+    }
+}
