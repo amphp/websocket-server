@@ -3,9 +3,9 @@
 namespace Amp\Http\Server\Websocket;
 
 use Amp\ByteStream\InputStream;
-use Amp\Http\Server\Body;
+use Amp\ByteStream\Payload;
 
-final class Message extends Body {
+final class Message extends Payload {
     /** @var bool */
     private $binary;
 

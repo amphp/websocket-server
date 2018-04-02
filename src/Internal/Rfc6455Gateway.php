@@ -11,7 +11,6 @@ use Amp\Emitter;
 use Amp\Failure;
 use Amp\Http\Server\ClientException;
 use Amp\Http\Server\Request;
-use Amp\Http\Server\Responder;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
@@ -25,8 +24,10 @@ use Amp\Success;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 
-class Rfc6455Gateway implements Responder, ServerObserver {
+class Rfc6455Gateway implements ServerObserver {
     use CallableMaker;
+
+    const ACCEPT_CONCAT = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
     /** @var PsrLogger */
     private $logger;
@@ -120,19 +121,19 @@ class Rfc6455Gateway implements Responder, ServerObserver {
     private function do(Request $request): \Generator {
         /** @var \Amp\Http\Server\Response $response */
         if ($request->getMethod() !== "GET") {
-            $response = yield $this->errorHandler->handle(Status::METHOD_NOT_ALLOWED, null, $request);
+            $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
             $response->setHeader("Allow", "GET");
             return $response;
         }
 
         if ($request->getProtocolVersion() !== "1.1") {
-            $response = yield $this->errorHandler->handle(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
+            $response = yield $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
             $response->setHeader("Upgrade", "websocket");
             return $response;
         }
 
         if (null !== yield $request->getBody()->read()) {
-            return yield $this->errorHandler->handle(Status::BAD_REQUEST, null, $request);
+            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
         }
 
         $hasUpgradeWebsocket = false;
@@ -143,7 +144,7 @@ class Rfc6455Gateway implements Responder, ServerObserver {
             }
         }
         if (!$hasUpgradeWebsocket) {
-            return yield $this->errorHandler->handle(Status::UPGRADE_REQUIRED, null, $request);
+            return yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
         }
 
         $hasConnectionUpgrade = false;
@@ -160,35 +161,43 @@ class Rfc6455Gateway implements Responder, ServerObserver {
 
         if (!$hasConnectionUpgrade) {
             $reason = "Bad Request: \"Connection: Upgrade\" header required";
-            $response = yield $this->errorHandler->handle(Status::UPGRADE_REQUIRED, $reason, $request);
+            $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
             $response->setHeader("Upgrade", "websocket");
             return $response;
         }
 
         if (!$acceptKey = $request->getHeader("Sec-Websocket-Key")) {
             $reason = "Bad Request: \"Sec-Websocket-Key\" header required";
-            return yield $this->errorHandler->handle(Status::BAD_REQUEST, $reason, $request);
+            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
         }
 
         if (!\in_array("13", $request->getHeaderArray("Sec-Websocket-Version"), true)) {
             $reason = "Bad Request: Requested Websocket version unavailable";
-            $response = yield $this->errorHandler->handle(Status::BAD_REQUEST, $reason, $request);
+            $response = yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
             $response->setHeader("Sec-Websocket-Version", "13");
             return $response;
         }
 
-        $response = new Rfc6455Handshake($acceptKey);
+        $concatKeyStr = $acceptKey . self::ACCEPT_CONCAT;
+        $secWebSocketAccept = \base64_encode(\sha1($concatKeyStr, true));
 
+        $response = new Response(Status::SWITCHING_PROTOCOLS, [
+            "Connection" => "upgrade",
+            "Upgrade" => "websocket",
+            "Sec-WebSocket-Accept" => $secWebSocketAccept,
+        ]);
+
+        $compressionContext = null;
         if ($this->compressionEnabled) {
             $extensions = (string) $request->getHeader("Sec-Websocket-Extensions");
 
-            $extensions = array_map("trim", explode(',', $extensions));
+            $extensions = \array_map("trim", \explode(',', $extensions));
 
             foreach ($extensions as $extension) {
                 if ($compressionContext = Rfc7692Compression::fromHeader($extension, $headerLine)) {
                     $response->setHeader("Sec-Websocket-Extensions", $headerLine);
+                    break;
                 }
-                break;
             }
         }
 
@@ -204,8 +213,8 @@ class Rfc6455Gateway implements Responder, ServerObserver {
         }
 
         if ($response->getStatus() === Status::SWITCHING_PROTOCOLS) {
-            $response->upgrade(function (Socket $socket) use ($request) {
-                $this->reapClient($socket, $request, $compressionContext ?? null);
+            $response->upgrade(function (Socket $socket) use ($request, $compressionContext) {
+                $this->reapClient($socket, $request, $compressionContext);
             });
         }
 

@@ -3,12 +3,12 @@
 namespace Amp\Http\Server\Websocket;
 
 use Amp\Http\Server\Request;
-use Amp\Http\Server\Responder;
+use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Promise;
 
-class Websocket implements Responder, ServerObserver {
+class Websocket implements RequestHandler, ServerObserver {
     /** @var \Amp\Http\Server\Websocket\Internal\Rfc6455Gateway */
     private $gateway;
 
@@ -22,7 +22,7 @@ class Websocket implements Responder, ServerObserver {
     }
 
     /** {@inheritdoc} */
-    public function respond(Request $request): Promise {
+    public function handleRequest(Request $request): Promise {
         return $this->gateway->respond($request);
     }
 

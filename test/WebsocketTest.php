@@ -5,13 +5,13 @@ namespace Amp\Http\Server\Websocket\Test;
 use Amp\ByteStream\InMemoryStream;
 use Amp\Deferred;
 use Amp\Delayed;
-use Amp\Http\Server\Body;
-use Amp\Http\Server\Client;
+use Amp\Http\Server\Driver\Client;
 use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\Request;
+use Amp\Http\Server\RequestBody;
+use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
-use Amp\Http\Server\TimeReference;
 use Amp\Http\Server\Websocket\Application;
 use Amp\Http\Server\Websocket\Code;
 use Amp\Http\Server\Websocket\Endpoint;
@@ -21,7 +21,7 @@ use Amp\Http\Status;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Promise;
-use Amp\Socket\ClientSocket;
+use Amp\Socket;
 use League\Uri;
 use Psr\Log\NullLogger;
 
@@ -93,15 +93,19 @@ class WebsocketTest extends TestCase {
         list($socket, $client) = stream_socket_pair(\stripos(PHP_OS, "win") === 0 ? STREAM_PF_INET : STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
         stream_set_blocking($client, false);
 
-        $server = $this->createMock(Server::class);
-        $server->method('getTimeReference')
-            ->willReturn(new TimeReference);
+        $server = new Server(
+            [$this->createMock(Socket\Server::class)],
+            $this->createMock(RequestHandler::class),
+            new NullLogger
+        );
 
         $gateway = new Rfc6455Gateway($application);
 
         yield $gateway->onStart($server);
 
-        $client = $gateway->reapClient(new ClientSocket($client), $this->createMock(Request::class));
+        $request = new Request($this->createMock(Client::class), 'GET', Uri\Http::createFromString("/"));
+
+        $client = $gateway->reapClient(new Socket\ClientSocket($client), $request);
 
         return [$gateway, $client, $socket, $server];
     }
@@ -227,12 +231,11 @@ class WebsocketTest extends TestCase {
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []) {
         Loop::run(function () use ($request, $status, $expectedHeaders) {
-            $server = $this->createMock(Server::class);
-            $server->method('getLogger')
-                ->willReturn(new NullLogger);
-
-            $server->method('getErrorHandler')
-                ->willReturn(new DefaultErrorHandler);
+            $server = new Server(
+                [$this->createMock(Socket\Server::class)],
+                $this->createMock(RequestHandler::class),
+                new NullLogger
+            );
 
             $application = $this->createMock(Application::class);
 
@@ -284,7 +287,7 @@ class WebsocketTest extends TestCase {
         $testCases[] = [$request, Status::HTTP_VERSION_NOT_SUPPORTED];
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
-        $body = new Body(new InMemoryStream("Non-empty body"));
+        $body = new RequestBody(new InMemoryStream("Non-empty body"));
         $request = new Request($this->createMock(Client::class), "GET", Uri\Http::createFromString("/"), $headers, $body);
         $testCases[] = [$request, Status::BAD_REQUEST];
 
@@ -483,7 +486,6 @@ class WebsocketTest extends TestCase {
 
             $this->assertEquals(1, $client->pongCount);
 
-            $server->state = Server::STOPPED;
             yield $gateway->onStop($server);
 
             Loop::stop();
