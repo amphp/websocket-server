@@ -6,17 +6,15 @@ use Amp\ByteStream\InMemoryStream;
 use Amp\Deferred;
 use Amp\Delayed;
 use Amp\Http\Server\Driver\Client;
-use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestBody;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
-use Amp\Http\Server\Websocket\Application;
 use Amp\Http\Server\Websocket\Code;
-use Amp\Http\Server\Websocket\Endpoint;
 use Amp\Http\Server\Websocket\Internal\Rfc6455Gateway;
 use Amp\Http\Server\Websocket\Message;
+use Amp\Http\Server\Websocket\Websocket;
 use Amp\Http\Status;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
@@ -25,35 +23,13 @@ use Amp\Socket;
 use League\Uri;
 use Psr\Log\NullLogger;
 
-class NullApplication implements Application {
+class NullApplication extends Websocket {
     /** @var TestCase */
     public $test;
 
-    /** @var Endpoint */
-    public $endpoint;
-
     public function __construct($test = null) {
+        parent::__construct();
         $this->test = $test;
-    }
-
-    public function onStart(Endpoint $endpoint) {
-        $this->endpoint = $endpoint;
-    }
-
-    public function onHandshake(Request $request, Response $response) {
-        return $response;
-    }
-
-    public function onOpen(int $clientId, Request $request) {
-    }
-
-    public function onData(int $clientId, Message $msg) {
-    }
-
-    public function onClose(int $clientId, int $code, string $reason) {
-    }
-
-    public function onStop() {
     }
 }
 
@@ -89,8 +65,10 @@ class WebsocketTest extends TestCase {
         }
     }
 
-    public function initEndpoint(Application $application, bool $timeoutTest = false) {
-        list($socket, $client) = stream_socket_pair(\stripos(PHP_OS, "win") === 0 ? STREAM_PF_INET : STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+    public function initEndpoint(Websocket $application) {
+        list($socket, $client) = stream_socket_pair(
+            \stripos(PHP_OS, "win") === 0 ? STREAM_PF_INET : STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP
+        );
         stream_set_blocking($client, false);
 
         $server = new Server(
@@ -188,7 +166,7 @@ class WebsocketTest extends TestCase {
      */
     public function testAppErrorClosesConnection(string $method, array $call = null) {
         Loop::run(function () use ($method, $call) {
-            $application = $this->createMock(Application::class);
+            $application = $this->createMock(Websocket::class);
             $application->expects($this->once())
                 ->method($method)
                 ->willReturnCallback(function () {
@@ -197,7 +175,7 @@ class WebsocketTest extends TestCase {
             $application->method("onHandshake")
                 ->willReturnArgument(1);
 
-            list($gateway, $client, $socket) = yield from $this->initEndpoint($application, $timeoutTest = true);
+            list($gateway, $client, $socket) = yield from $this->initEndpoint($application);
 
             if ($call !== null) {
                 list($method, $args) = $call;
@@ -237,7 +215,7 @@ class WebsocketTest extends TestCase {
                 new NullLogger
             );
 
-            $application = $this->createMock(Application::class);
+            $application = $this->createMock(Websocket::class);
 
             $application->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
                 ->method("onHandshake")
@@ -418,13 +396,13 @@ class WebsocketTest extends TestCase {
     public function testMultiWrite() {
         Loop::run(function () {
             /** @var Rfc6455Gateway $gateway */
-            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class($this) extends NullApplication {
+            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class() extends Websocket {
                 public function onData(int $clientId, Message $msg) {
                     // Fill send buffer
-                    $this->endpoint->broadcast("foo".str_repeat("*", 1 << 20));
-                    $this->endpoint->send("bar", $clientId);
-                    yield $this->endpoint->multicast("baz", [$clientId]);
-                    $this->endpoint->close($clientId);
+                    $this->broadcast("foo".str_repeat("*", 1 << 20));
+                    $this->send("bar", $clientId);
+                    yield $this->multicast("baz", [$clientId]);
+                    $this->close($clientId);
                 }
             });
 

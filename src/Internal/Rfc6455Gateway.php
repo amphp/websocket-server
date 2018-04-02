@@ -17,6 +17,7 @@ use Amp\Http\Server\ServerObserver;
 use Amp\Http\Server\Websocket\Application;
 use Amp\Http\Server\Websocket\Code;
 use Amp\Http\Server\Websocket\Message;
+use Amp\Http\Server\Websocket\Websocket;
 use Amp\Http\Status;
 use Amp\Promise;
 use Amp\Socket\Socket;
@@ -81,7 +82,7 @@ class Rfc6455Gateway implements ServerObserver {
     const OP_PING  = 0x09;
     const OP_PONG  = 0x0A;
 
-    public function __construct(Application $application) {
+    public function __construct(Websocket $application) {
         $this->application = $application;
         $this->endpoint = new Rfc6455Endpoint($this);
         $this->compressionEnabled = \extension_loaded('zlib');
@@ -639,31 +640,19 @@ class Rfc6455Gateway implements ServerObserver {
 
         $server->getTimeReference()->onTimeUpdate($this->callableFromInstanceMethod("timeout"));
 
-        return call([$this->application, "onStart"], $this->endpoint);
+        return new Success;
     }
 
     public function onStop(Server $server): Promise {
-        return call(function () {
-            try {
-                yield call([$this->application, "onStop"]);
-            } catch (\Throwable $exception) {
-                // Exception rethrown below after ensuring all clients are closed.
-            }
+        $code = Code::GOING_AWAY;
+        $reason = "Server shutting down!";
 
-            $code = Code::GOING_AWAY;
-            $reason = "Server shutting down!";
+        $promises = [];
+        foreach ($this->clients as $client) {
+            $promises[] = new Coroutine($this->doClose($client, $code, $reason));
+        }
 
-            $promises = [];
-            foreach ($this->clients as $client) {
-                $promises[] = new Coroutine($this->doClose($client, $code, $reason));
-            }
-
-            yield $promises;
-
-            if (isset($exception)) {
-                throw $exception;
-            }
-        });
+        return Promise\all($promises);
     }
 
     private function sendHeartbeatPing(Rfc6455Client $client) {

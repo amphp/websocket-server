@@ -10,6 +10,7 @@ use Amp\Http\Server\Websocket\Endpoint;
 use Amp\Http\Server\Websocket\Internal\Rfc6455Client;
 use Amp\Http\Server\Websocket\Internal\Rfc6455Gateway;
 use Amp\Http\Server\Websocket\Message;
+use Amp\Http\Server\Websocket\Websocket;
 use Amp\PHPUnit\TestCase;
 use Amp\Socket\Socket;
 
@@ -42,42 +43,25 @@ class WebsocketParserTest extends TestCase {
      */
     public function testParser($msg, array $message = null, array $error = null) {
         if ($message) {
-            $websocket = new class($this, ...$message) implements Application {
+            $websocket = new class($this, ...$message) extends Websocket {
                 private $test;
                 private $data;
                 private $binary;
 
                 public function __construct(TestCase $test, string $data, bool $isBinary) {
+                    parent::__construct();
                     $this->test = $test;
                     $this->data = $data;
                     $this->binary = $isBinary;
-                }
-
-                public function onStart(Endpoint $endpoint) {
-                }
-
-                public function onHandshake(Request $request, Response $response) {
-                    return $response;
-                }
-
-                public function onOpen(int $clientId, Request $request) {
                 }
 
                 public function onData(int $clientId, Message $msg) {
                     $this->test->assertSame($this->data, yield $msg);
                     $this->test->assertSame($this->binary, $msg->isBinary());
                 }
-
-                public function onClose(int $clientId, int $code, string $reason) {
-                    // TODO: Implement onClose() method.
-                }
-
-                public function onStop() {
-                    // TODO: Implement onStop() method.
-                }
             };
         } else {
-            $websocket = $this->createMock(Application::class);
+            $websocket = $this->createMock(Websocket::class);
         }
 
         $gateway = new Rfc6455Gateway($websocket);
