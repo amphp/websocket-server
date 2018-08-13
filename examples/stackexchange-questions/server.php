@@ -1,11 +1,13 @@
 <?php
 
-// Note that this example requires amphp/artax, amphp/http-router, and amphp/http-file-server to be installed.
+// Note that this example requires amphp/artax, amphp/http-server-router,
+// amphp/http-server-static-content and amphp/log to be installed.
 
-use Amp\Http\Server\File\Root;
+use Amp\ByteStream\ResourceOutputStream;
+use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\Router\Router;
+use Amp\Http\Server\Router;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\Websocket\Application;
 use Amp\Http\Server\Websocket\Endpoint;
@@ -13,6 +15,10 @@ use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
 use Amp\Artax\Client;
 use Amp\Loop;
+use Amp\Log\ConsoleFormatter;
+use Amp\Log\StreamHandler;
+use Amp\Socket;
+use Monolog\Logger;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -73,13 +79,21 @@ $websocket = new Websocket(new class implements Application {
     }
 });
 
+$servers = [
+    Socket\listen("0.0.0.0:1337"),
+    Socket\listen("[::]:1337"),
+];
+
 $router = new Router;
 $router->addRoute("GET", "/live", $websocket);
-$router->setFallback(new Root(__DIR__ . "/public"));
+$router->setFallback(new DocumentRoot(__DIR__ . "/public"));
 
-$server = new Server($router);
-$server->expose("127.0.0.1", 1337);
+$logHandler = new StreamHandler(new ResourceOutputStream(\STDOUT));
+$logHandler->setFormatter(new ConsoleFormatter);
+$logger = new Logger('server');
+$logger->pushHandler($logHandler);
 
+$server = new Server($servers, $router, $logger);
 Loop::run(function () use ($server) {
     yield $server->start();
 });
