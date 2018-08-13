@@ -6,7 +6,6 @@ use Amp\ByteStream\InMemoryStream;
 use Amp\Deferred;
 use Amp\Delayed;
 use Amp\Http\Server\Driver\Client;
-use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestBody;
 use Amp\Http\Server\RequestHandler;
@@ -252,7 +251,7 @@ class WebsocketTest extends TestCase {
             $this->assertEquals($expectedHeaders, array_intersect_key($response->getHeaders(), $expectedHeaders));
 
             if ($status === Status::SWITCHING_PROTOCOLS) {
-                $this->assertNull(yield $response->getBody()->read());
+                $this->assertEmpty(yield $response->getBody()->read());
             }
 
             yield $gateway->onStop($server);
