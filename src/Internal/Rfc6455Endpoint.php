@@ -7,7 +7,7 @@ use Amp\Http\Server\Websocket\Endpoint;
 use Amp\Promise;
 
 class Rfc6455Endpoint implements Endpoint {
-    /** @var \Amp\Http\Server\Websocket\Internal\Rfc6455Gateway */
+    /** @var Rfc6455Gateway */
     private $gateway;
 
     public function __construct(Rfc6455Gateway $gateway) {

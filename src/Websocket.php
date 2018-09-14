@@ -9,13 +9,13 @@ use Amp\Http\Server\ServerObserver;
 use Amp\Promise;
 
 class Websocket implements RequestHandler, ServerObserver {
-    /** @var \Amp\Http\Server\Websocket\Internal\Rfc6455Gateway */
+    /** @var Internal\Rfc6455Gateway */
     private $gateway;
 
     /**
      * Creates a responder that accepts websocket connections.
      *
-     * @param \Amp\Http\Server\Websocket\Application $application
+     * @param Application $application
      */
     public function __construct(Application $application) {
         $this->gateway = new Internal\Rfc6455Gateway($application);
@@ -41,7 +41,7 @@ class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the number of bytes is less than 1.
      */
-    public function setMaxBytesPerMinute(int $bytes) {
+    public function setBytesPerMinuteLimit(int $bytes) {
         $this->gateway->setOption("maxBytesPerMinute", $bytes);
     }
 
@@ -50,7 +50,7 @@ class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the size is less than 1.
      */
-    public function setMaxFrameSize(int $size) {
+    public function setFrameSizeLimit(int $size) {
         $this->gateway->setOption("maxFrameSize", $size);
     }
 
@@ -59,7 +59,7 @@ class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the count is less than 1.
      */
-    public function setMaxFramesPerSecond(int $count) {
+    public function setFramesPerSecondLimit(int $count) {
         $this->gateway->setOption("maxFramesPerSecond", $count);
     }
 
@@ -104,14 +104,14 @@ class Websocket implements RequestHandler, ServerObserver {
     /**
      * @param bool $validate True to validate text frame data as UTF-8, false to skip validation. Default is true.
      */
-    public function validateUtf8(bool $validate) {
+    public function setValidateUtf8(bool $validate) {
         $this->gateway->setOption("validateUtf8", $validate);
     }
 
     /**
      * @param bool $textOnly True to allow only text frames (no binary).
      */
-    public function textOnly(bool $textOnly) {
+    public function setTextOnly(bool $textOnly) {
         $this->gateway->setOption("textOnly", $textOnly);
     }
 

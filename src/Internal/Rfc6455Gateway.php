@@ -10,6 +10,7 @@ use Amp\Deferred;
 use Amp\Emitter;
 use Amp\Failure;
 use Amp\Http\Server\ClientException;
+use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
@@ -27,7 +28,7 @@ use function Amp\call;
 class Rfc6455Gateway implements ServerObserver {
     use CallableMaker;
 
-    const ACCEPT_CONCAT = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    const ACCEPT_CONCAT = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
     /** @var PsrLogger */
     private $logger;
@@ -38,7 +39,7 @@ class Rfc6455Gateway implements ServerObserver {
     /** @var Rfc6455Endpoint */
     private $endpoint;
 
-    /** @var \Amp\Http\Server\ErrorHandler */
+    /** @var ErrorHandler */
     private $errorHandler;
 
     /** @var Rfc6455Client[] */
@@ -69,7 +70,7 @@ class Rfc6455Gateway implements ServerObserver {
     private $textOnly = false;
     private $queuedPingLimit = 3;
     private $maxFramesPerSecond = 100; // do not bother with setting it too low, fread(8192) may anyway include up to 2700 frames
-    private $compressionEnabled = false;
+    private $compressionEnabled;
 
     // Frame control bits
     const FIN      = 0b1;
@@ -89,21 +90,21 @@ class Rfc6455Gateway implements ServerObserver {
 
     public function setOption(string $option, $value) {
         switch ($option) {
-            case "maxBytesPerMinute":
-            case "autoFrameSize":
-            case "maxFrameSize":
-            case "maxFramesPerSecond":
-            case "maxMessageSize":
-            case "heartbeatPeriod":
-            case "closePeriod":
-            case "queuedPingLimit":
+            case 'maxBytesPerMinute':
+            case 'autoFrameSize':
+            case 'maxFrameSize':
+            case 'maxFramesPerSecond':
+            case 'maxMessageSize':
+            case 'heartbeatPeriod':
+            case 'closePeriod':
+            case 'queuedPingLimit':
                 if (0 >= $value = filter_var($value, FILTER_VALIDATE_INT)) {
                     throw new \Error("$option must be a positive integer greater than 0");
                 }
                 break;
-            case "compressionEnabled":
-            case "validateUtf8":
-            case "textOnly":
+            case 'compressionEnabled':
+            case 'validateUtf8':
+            case 'textOnly':
                 if (null === $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)) {
                     throw new \Error("$option must be a boolean value");
                 }
@@ -120,15 +121,15 @@ class Rfc6455Gateway implements ServerObserver {
 
     private function do(Request $request): \Generator {
         /** @var \Amp\Http\Server\Response $response */
-        if ($request->getMethod() !== "GET") {
+        if ($request->getMethod() !== 'GET') {
             $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
-            $response->setHeader("Allow", "GET");
+            $response->setHeader('Allow', 'GET');
             return $response;
         }
 
-        if ($request->getProtocolVersion() !== "1.1") {
+        if ($request->getProtocolVersion() !== '1.1') {
             $response = yield $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
-            $response->setHeader("Upgrade", "websocket");
+            $response->setHeader('Upgrade', 'websocket');
             return $response;
         }
 
@@ -137,8 +138,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
 
         $hasUpgradeWebsocket = false;
-        foreach ($request->getHeaderArray("Upgrade") as $value) {
-            if (strcasecmp($value, "websocket") === 0) {
+        foreach ($request->getHeaderArray('Upgrade') as $value) {
+            if (strcasecmp($value, 'websocket') === 0) {
                 $hasUpgradeWebsocket = true;
                 break;
             }
@@ -148,11 +149,11 @@ class Rfc6455Gateway implements ServerObserver {
         }
 
         $hasConnectionUpgrade = false;
-        foreach ($request->getHeaderArray("Connection") as $value) {
-            $values = array_map("trim", explode(",", $value));
+        foreach ($request->getHeaderArray('Connection') as $value) {
+            $values = array_map('trim', explode(',', $value));
 
             foreach ($values as $token) {
-                if (strcasecmp($token, "Upgrade") === 0) {
+                if (strcasecmp($token, 'Upgrade') === 0) {
                     $hasConnectionUpgrade = true;
                     break;
                 }
@@ -160,21 +161,21 @@ class Rfc6455Gateway implements ServerObserver {
         }
 
         if (!$hasConnectionUpgrade) {
-            $reason = "Bad Request: \"Connection: Upgrade\" header required";
+            $reason = 'Bad Request: "Connection: Upgrade" header required';
             $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
-            $response->setHeader("Upgrade", "websocket");
+            $response->setHeader('Upgrade', 'websocket');
             return $response;
         }
 
-        if (!$acceptKey = $request->getHeader("Sec-Websocket-Key")) {
-            $reason = "Bad Request: \"Sec-Websocket-Key\" header required";
+        if (!$acceptKey = $request->getHeader('Sec-Websocket-Key')) {
+            $reason = 'Bad Request: "Sec-Websocket-Key" header required';
             return yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
         }
 
-        if (!\in_array("13", $request->getHeaderArray("Sec-Websocket-Version"), true)) {
-            $reason = "Bad Request: Requested Websocket version unavailable";
+        if (!\in_array('13', $request->getHeaderArray('Sec-Websocket-Version'), true)) {
+            $reason = 'Bad Request: Requested Websocket version unavailable';
             $response = yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
-            $response->setHeader("Sec-Websocket-Version", "13");
+            $response->setHeader('Sec-Websocket-Version', '13');
             return $response;
         }
 
@@ -182,33 +183,33 @@ class Rfc6455Gateway implements ServerObserver {
         $secWebSocketAccept = \base64_encode(\sha1($concatKeyStr, true));
 
         $response = new Response(Status::SWITCHING_PROTOCOLS, [
-            "Connection" => "upgrade",
-            "Upgrade" => "websocket",
-            "Sec-WebSocket-Accept" => $secWebSocketAccept,
+            'Connection' => 'upgrade',
+            'Upgrade' => 'websocket',
+            'Sec-WebSocket-Accept' => $secWebSocketAccept,
         ]);
 
         $compressionContext = null;
         if ($this->compressionEnabled) {
-            $extensions = (string) $request->getHeader("Sec-Websocket-Extensions");
+            $extensions = (string) $request->getHeader('Sec-Websocket-Extensions');
 
-            $extensions = \array_map("trim", \explode(',', $extensions));
+            $extensions = \array_map('trim', \explode(',', $extensions));
 
             foreach ($extensions as $extension) {
                 if ($compressionContext = Rfc7692Compression::fromHeader($extension, $headerLine)) {
-                    $response->setHeader("Sec-Websocket-Extensions", $headerLine);
+                    $response->setHeader('Sec-Websocket-Extensions', $headerLine);
                     break;
                 }
             }
         }
 
-        $response = yield call([$this->application, "onHandshake"], $request, $response);
+        $response = yield call([$this->application, 'onHandshake'], $request, $response);
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
-                "%s::onHandshake() must return or resolve to an instance of %s, %s returned",
+                '%s::onHandshake() must return or resolve to an instance of %s, %s returned',
                 Application::class,
                 Response::class,
-                \is_object($response) ? "instance of " . \get_class($response) : \gettype($response)
+                \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
             ));
         }
 
@@ -234,10 +235,10 @@ class Rfc6455Gateway implements ServerObserver {
         $client->compressionContext = $compressionContext;
 
         $client->parser = $this->parser($client, $options = [
-            "max_msg_size" => $this->maxMessageSize,
-            "max_frame_size" => $this->maxFrameSize,
-            "validate_utf8" => $this->validateUtf8,
-            "text_only" => $this->textOnly,
+            'max_msg_size' => $this->maxMessageSize,
+            'max_frame_size' => $this->maxFrameSize,
+            'validate_utf8' => $this->validateUtf8,
+            'text_only' => $this->textOnly,
         ]);
 
         $this->clients[$client->id] = $client;
@@ -284,7 +285,7 @@ class Rfc6455Gateway implements ServerObserver {
         if (!$client->closedAt) {
             $client->closedAt = $this->now;
             $client->closeCode = Code::ABNORMAL_CLOSE;
-            $client->closeReason = "Client closed underlying TCP connection";
+            $client->closeReason = 'Client closed underlying TCP connection';
             yield from $this->tryAppOnClose($client->id, $client->closeCode, $client->closeReason);
             $client->socket->close();
         }
@@ -295,7 +296,7 @@ class Rfc6455Gateway implements ServerObserver {
     private function onAppError(int $clientId, \Throwable $e): \Generator {
         $this->logger->error((string) $e);
         $code = Code::UNEXPECTED_SERVER_ERROR;
-        $reason = "Internal server error, aborting";
+        $reason = 'Internal server error, aborting';
         if (isset($this->clients[$clientId])) { // might have been already unloaded + closed
             yield from $this->doClose($this->clients[$clientId], $code, $reason);
         }
@@ -330,15 +331,15 @@ class Rfc6455Gateway implements ServerObserver {
     }
 
     private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise {
-        \assert($code !== Code::NONE || $msg === "");
-        $promise = $this->write($client, $code !== Code::NONE ? pack('n', $code) . $msg : "", self::OP_CLOSE);
+        \assert($code !== Code::NONE || $msg === '');
+        $promise = $this->write($client, $code !== Code::NONE ? pack('n', $code) . $msg : '', self::OP_CLOSE);
         $client->closedAt = $this->now;
         return $promise;
     }
 
     private function tryAppOnOpen(int $clientId, Request $request): \Generator {
         try {
-            yield call([$this->application, "onOpen"], $clientId, $request);
+            yield call([$this->application, 'onOpen'], $clientId, $request);
         } catch (\Throwable $e) {
             yield from $this->onAppError($clientId, $e);
         }
@@ -346,7 +347,7 @@ class Rfc6455Gateway implements ServerObserver {
 
     private function tryAppOnData(Rfc6455Client $client, Message $msg): \Generator {
         try {
-            yield call([$this->application, "onData"], $client->id, $msg);
+            yield call([$this->application, 'onData'], $client->id, $msg);
         } catch (\Throwable $e) {
             yield from $this->onAppError($client->id, $e);
         }
@@ -354,7 +355,7 @@ class Rfc6455Gateway implements ServerObserver {
 
     private function tryAppOnClose(int $clientId, int $code, string $reason): \Generator {
         try {
-            yield call([$this->application, "onClose"], $clientId, $code, $reason);
+            yield call([$this->application, 'onClose'], $clientId, $code, $reason);
         } catch (\Throwable $e) {
             yield from $this->onAppError($clientId, $e);
         }
@@ -523,7 +524,7 @@ class Rfc6455Gateway implements ServerObserver {
         ++$client->messagesSent;
         $opcode = $binary ? self::OP_BIN : self::OP_TEXT;
 
-        \assert($binary || preg_match("//u", $data), "non-binary data needs to be UTF-8 compatible");
+        \assert($binary || preg_match('//u', $data), 'non-binary data needs to be UTF-8 compatible');
 
         return $client->lastWrite = new Coroutine($this->doSend($client, $data, $opcode));
     }
@@ -576,7 +577,7 @@ class Rfc6455Gateway implements ServerObserver {
             $exceptIdLookup = \array_flip($exceptIds);
 
             if ($exceptIdLookup === null) {
-                throw new \Error("Unable to array_flip() the passed IDs");
+                throw new \Error('Unable to array_flip() the passed IDs');
             }
 
             foreach ($this->clients as $id => $client) {
@@ -597,7 +598,7 @@ class Rfc6455Gateway implements ServerObserver {
         return Promise\all($promises);
     }
 
-    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = "") {
+    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '') {
         if (isset($this->clients[$clientId])) {
             Promise\rethrow(new Coroutine($this->doClose($this->clients[$clientId], $code, $reason)));
         }
@@ -637,21 +638,21 @@ class Rfc6455Gateway implements ServerObserver {
         $this->logger = $server->getLogger();
         $this->errorHandler = $server->getErrorHandler();
 
-        $server->getTimeReference()->onTimeUpdate($this->callableFromInstanceMethod("timeout"));
+        $server->getTimeReference()->onTimeUpdate($this->callableFromInstanceMethod('timeout'));
 
-        return call([$this->application, "onStart"], $this->endpoint);
+        return call([$this->application, 'onStart'], $this->endpoint);
     }
 
     public function onStop(Server $server): Promise {
         return call(function () {
             try {
-                yield call([$this->application, "onStop"]);
+                yield call([$this->application, 'onStop']);
             } catch (\Throwable $exception) {
                 // Exception rethrown below after ensuring all clients are closed.
             }
 
             $code = Code::GOING_AWAY;
-            $reason = "Server shutting down!";
+            $reason = 'Server shutting down';
 
             $promises = [];
             foreach ($this->clients as $client) {
@@ -729,10 +730,10 @@ class Rfc6455Gateway implements ServerObserver {
      * @return \Generator
      */
     public function parser(Rfc6455Client $client, array $options = []): \Generator {
-        $maxFrameSize = $options["max_frame_size"] ?? PHP_INT_MAX;
-        $maxMessageSize = $options["max_msg_size"] ?? PHP_INT_MAX;
-        $textOnly = $options["text_only"] ?? false;
-        $doUtf8Validation = $validateUtf8 = $options["validate_utf8"] ?? false;
+        $maxFrameSize = $options['max_frame_size'] ?? PHP_INT_MAX;
+        $maxMessageSize = $options['max_msg_size'] ?? PHP_INT_MAX;
+        $textOnly = $options['text_only'] ?? false;
+        $doUtf8Validation = $validateUtf8 = $options['validate_utf8'] ?? false;
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';

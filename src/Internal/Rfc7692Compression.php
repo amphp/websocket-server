@@ -13,9 +13,6 @@ class Rfc7692Compression {
     /** @var resource */
     private $inflate;
 
-    private $serverWindowSize;
-    private $clientWindowSize;
-
     private $serverContextTakeover;
     private $clientContextTakeover;
 
@@ -27,9 +24,9 @@ class Rfc7692Compression {
      */
     public static function fromHeader(string $headerIn, string &$headerOut = null) { /* : ?self */
         $headerIn = \explode(';', \strtolower($headerIn));
-        $headerIn = \array_map("trim", $headerIn);
+        $headerIn = \array_map('trim', $headerIn);
 
-        if (!\in_array("permessage-deflate", $headerIn, true)) {
+        if (!\in_array('permessage-deflate', $headerIn, true)) {
             return null;
         }
 
@@ -39,22 +36,22 @@ class Rfc7692Compression {
         $clientContextTakeover = true;
 
         $headers = [];
-        $headerOut = "permessage-deflate";
+        $headerOut = 'permessage-deflate';
 
         foreach ($headerIn as $param) {
             $parts = \explode('=', $param, 2);
 
-            if (in_array($parts[0], $headers, true)) {
+            if (\in_array($parts[0], $headers, true)) {
                 return null; // Repeat params in header.
             }
 
             $headers[] = $parts[0];
 
             switch ($parts[0]) {
-                case "permessage-deflate":
+                case 'permessage-deflate':
                     break;
 
-                case "client_max_window_bits":
+                case 'client_max_window_bits':
                     if (!isset($parts[1])) {
                         break; // Use default value.
                     }
@@ -66,15 +63,15 @@ class Rfc7692Compression {
                     }
 
                     $clientWindowSize = $value;
-                    $headerOut .= "; client_max_window_bits=" . $value;
+                    $headerOut .= '; client_max_window_bits=' . $value;
                     break;
 
-                case "client_no_context_takeover":
+                case 'client_no_context_takeover':
                     $clientContextTakeover = false;
-                    $headerOut .= "; client_no_context_takeover";
+                    $headerOut .= '; client_no_context_takeover';
                     break;
 
-                case "server_max_window_bits":
+                case 'server_max_window_bits':
                     if (!isset($parts[1])) {
                         break; // Use default value.
                     }
@@ -86,12 +83,12 @@ class Rfc7692Compression {
                     }
 
                     $serverWindowSize = $value;
-                    $headerOut .= "; server_max_window_bits=" . $value;
+                    $headerOut .= '; server_max_window_bits=' . $value;
                     break;
 
-                case "server_no_context_takeover":
+                case 'server_no_context_takeover':
                     $serverContextTakeover = false;
-                    $headerOut .= "; server_no_context_takeover";
+                    $headerOut .= '; server_no_context_takeover';
                     break;
 
                 default:
@@ -108,17 +105,15 @@ class Rfc7692Compression {
         bool $clientContextTakeover,
         bool $serverContextTakeover
     ) {
-        $this->clientWindowSize = $clientWindowSize;
-        $this->serverWindowSize = $serverWindowSize;
         $this->clientContextTakeover = $clientContextTakeover;
         $this->serverContextTakeover = $serverContextTakeover;
 
-        if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $this->clientWindowSize])) === false) {
-            throw new \RuntimeException("Failed initializing inflate context");
+        if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $clientWindowSize])) === false) {
+            throw new \RuntimeException('Failed initializing inflate context');
         }
 
-        if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $this->serverWindowSize])) === false) {
-            throw new \RuntimeException("Failed initializing deflate context");
+        if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $serverWindowSize])) === false) {
+            throw new \RuntimeException('Failed initializing deflate context');
         }
     }
 
@@ -139,7 +134,7 @@ class Rfc7692Compression {
     public function compress(string $data): string {
         $data = \deflate_add($this->deflate, $data, $this->serverContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH);
         if ($data === false) {
-            throw new \RuntimeException("Failed to compress data");
+            throw new \RuntimeException('Failed to compress data');
         }
 
         // @TODO Is this always true?

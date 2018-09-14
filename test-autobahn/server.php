@@ -39,11 +39,11 @@ Amp\Loop::run(function () {
         public function onStop() { }
     });
 
-    $websocket->setMaxBytesPerMinute(PHP_INT_MAX);
-    $websocket->setMaxFrameSize(PHP_INT_MAX);
-    $websocket->setMaxFramesPerSecond(PHP_INT_MAX);
+    $websocket->setBytesPerMinuteLimit(PHP_INT_MAX);
+    $websocket->setFrameSizeLimit(PHP_INT_MAX);
+    $websocket->setFramesPerSecondLimit(PHP_INT_MAX);
     $websocket->setMessageSizeLimit(PHP_INT_MAX);
-    $websocket->validateUtf8(true);
+    $websocket->setValidateUtf8(true);
 
     $server = new Server([Socket\listen("127.0.0.1:9001")], $websocket, new NullLogger);
     return $server->start();
