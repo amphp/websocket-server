@@ -2,7 +2,7 @@
 
 namespace Amp\Http\Server\Websocket\Test;
 
-use Amp\ByteStream\InMemoryStream;
+use Amp\ByteStream;
 use Amp\Deferred;
 use Amp\Delayed;
 use Amp\Http\Server\Driver\Client;
@@ -251,7 +251,7 @@ class WebsocketTest extends TestCase {
             $this->assertEquals($expectedHeaders, array_intersect_key($response->getHeaders(), $expectedHeaders));
 
             if ($status === Status::SWITCHING_PROTOCOLS) {
-                $this->assertEmpty(yield $response->getBody()->read());
+                $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
             }
 
             yield $gateway->onStop($server);
@@ -286,7 +286,7 @@ class WebsocketTest extends TestCase {
         $testCases[] = [$request, Status::HTTP_VERSION_NOT_SUPPORTED];
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
-        $body = new RequestBody(new InMemoryStream("Non-empty body"));
+        $body = new RequestBody(new ByteStream\InMemoryStream("Non-empty body"));
         $request = new Request($this->createMock(Client::class), "GET", Uri\Http::createFromString("/"), $headers, $body);
         $testCases[] = [$request, Status::BAD_REQUEST];
 
