@@ -6,6 +6,8 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\Websocket;
+use Amp\Socket;
+use Psr\Log\NullLogger;
 
 Amp\Loop::run(function () {
     /* --- http://localhost:9001/ ------------------------------------------------------------------- */
@@ -43,8 +45,6 @@ Amp\Loop::run(function () {
     $websocket->setMessageSizeLimit(PHP_INT_MAX);
     $websocket->validateUtf8(true);
 
-    $server = new Server($websocket);
-    $server->expose("127.0.0.1", 9001);
-
+    $server = new Server([Socket\listen("127.0.0.1:9001")], $websocket, new NullLogger);
     return $server->start();
 });
