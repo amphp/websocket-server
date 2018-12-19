@@ -8,24 +8,20 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
+use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Server\Server;
-use Amp\Http\Server\Websocket\Application;
-use Amp\Http\Server\Websocket\Endpoint;
-use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
-use Amp\Artax\Client;
-use Amp\Loop;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
+use Amp\Loop;
+use Amp\Promise;
 use Amp\Socket;
+use Psr\Log\NullLogger;
 use Monolog\Logger;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-$websocket = new Websocket(new class implements Application {
-    /** @var Endpoint */
-    private $endpoint;
-
+$websocket = new class extends Websocket {
     /** @var string|null */
     private $watcher;
 
@@ -35,8 +31,8 @@ $websocket = new Websocket(new class implements Application {
     /** @var int|null */
     private $newestQuestion;
 
-    public function onStart(Endpoint $endpoint) {
-        $this->endpoint = $endpoint;
+    public function onStart(Server $server): Promise {
+        $promise = parent::onStart($server);
         $this->http = new Amp\Artax\DefaultClient;
         $this->watcher = Loop::repeat(10000, function () {
             /** @var Response $response */
@@ -48,10 +44,12 @@ $websocket = new Websocket(new class implements Application {
             foreach (\array_reverse($data["items"]) as $question) {
                 if ($this->newestQuestion === null || $question["question_id"] > $this->newestQuestion) {
                     $this->newestQuestion = $question["question_id"];
-                    $this->endpoint->broadcast(\json_encode($question));
+                    $this->broadcast(\json_encode($question));
                 }
             }
         });
+
+        return $promise;
     }
 
     public function onHandshake(Request $request, Response $response) {
@@ -62,22 +60,11 @@ $websocket = new Websocket(new class implements Application {
         return $response;
     }
 
-    public function onOpen(int $clientId, Request $request) {
-        // do nothing
-    }
-
-    public function onData(int $clientId, Message $message) {
-        // do nothing
-    }
-
-    public function onClose(int $clientId, int $code, string $reason) {
-        // do nothing
-    }
-
-    public function onStop() {
+    public function onStop(Server $server): Promise {
         Loop::cancel($this->watcher);
+        return parent::onStop($server);
     }
-});
+};
 
 $servers = [
     Socket\listen("0.0.0.0:1337"),
@@ -92,8 +79,12 @@ $logHandler = new StreamHandler(new ResourceOutputStream(\STDOUT));
 $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
+$sockets = [
+    Socket\listen("127.0.0.1:1337"),
+];
 
-$server = new Server($servers, $router, $logger);
+$server = new Server($sockets, $router, $logger);
+
 Loop::run(function () use ($server) {
     yield $server->start();
 });
