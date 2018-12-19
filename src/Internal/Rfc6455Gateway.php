@@ -98,14 +98,14 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
             case 'heartbeatPeriod':
             case 'closePeriod':
             case 'queuedPingLimit':
-                if (0 >= $value = filter_var($value, FILTER_VALIDATE_INT)) {
+                if (0 >= $value = \filter_var($value, FILTER_VALIDATE_INT)) {
                     throw new \Error("$option must be a positive integer greater than 0");
                 }
                 break;
             case 'compressionEnabled':
             case 'validateUtf8':
             case 'textOnly':
-                if (null === $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)) {
+                if (null === $value = \filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)) {
                     throw new \Error("$option must be a boolean value");
                 }
                 break;
@@ -141,7 +141,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
         $hasUpgradeWebsocket = false;
         foreach ($request->getHeaderArray('Upgrade') as $value) {
-            if (strcasecmp($value, 'websocket') === 0) {
+            if (\strcasecmp($value, 'websocket') === 0) {
                 $hasUpgradeWebsocket = true;
                 break;
             }
@@ -152,10 +152,10 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
         $hasConnectionUpgrade = false;
         foreach ($request->getHeaderArray('Connection') as $value) {
-            $values = array_map('trim', explode(',', $value));
+            $values = \array_map('trim', \explode(',', $value));
 
             foreach ($values as $token) {
-                if (strcasecmp($token, 'Upgrade') === 0) {
+                if (\strcasecmp($token, 'Upgrade') === 0) {
                     $hasConnectionUpgrade = true;
                     break;
                 }
@@ -338,7 +338,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
     private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise
     {
         \assert($code !== Code::NONE || $msg === '');
-        $promise = $this->write($client, $code !== Code::NONE ? pack('n', $code) . $msg : '', self::OP_CLOSE);
+        $promise = $this->write($client, $code !== Code::NONE ? \pack('n', $code) . $msg : '', self::OP_CLOSE);
         $client->closedAt = $this->now;
         return $promise;
     }
@@ -411,8 +411,8 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
                     $code = Code::PROTOCOL_ERROR;
                     $reason = 'Close code must be two bytes';
                 } else {
-                    $code = current(unpack('n', substr($data, 0, 2)));
-                    $reason = substr($data, 2);
+                    $code = \current(\unpack('n', \substr($data, 0, 2)));
+                    $reason = \substr($data, 2);
 
                     if ($code < 1000 // Reserved and unused.
                         || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
@@ -438,7 +438,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
             case self::OP_PONG:
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $client->pongCount = min($client->pingCount, $data);
+                $client->pongCount = \min($client->pingCount, $data);
                 break;
         }
     }
@@ -540,7 +540,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         ++$client->messagesSent;
         $opcode = $binary ? self::OP_BIN : self::OP_TEXT;
 
-        \assert($binary || preg_match('//u', $data), 'non-binary data needs to be UTF-8 compatible');
+        \assert($binary || \preg_match('//u', $data), 'non-binary data needs to be UTF-8 compatible');
 
         return $client->lastWrite = new Coroutine($this->doSend($client, $data, $opcode));
     }
@@ -653,7 +653,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
     public function getClients(): array
     {
-        return array_keys($this->clients);
+        return \array_keys($this->clients);
     }
 
     public function onStart(Server $server): Promise
@@ -922,7 +922,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
             if ($isMasked) {
                 if ($bufferSize < 4) {
-                    $buffer = substr($buffer, $offset);
+                    $buffer = \substr($buffer, $offset);
                     $offset = 0;
                     do {
                         $buffer .= yield $frames;
@@ -931,7 +931,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
                     } while ($bufferSize < 4);
                 }
 
-                $maskingKey = substr($buffer, $offset, 4);
+                $maskingKey = \substr($buffer, $offset, 4);
                 $offset += 4;
                 $bufferSize -= 4;
             }
@@ -950,7 +950,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
             if ($isMasked) {
                 // This is memory hungry but it's ~70x faster than iterating byte-by-byte
                 // over the masked string. Deal with it; manual iteration is untenable.
-                $payload ^= str_repeat($maskingKey, ($frameLength + 3) >> 2);
+                $payload ^= \str_repeat($maskingKey, ($frameLength + 3) >> 2);
             }
 
             if ($isControlFrame) {

@@ -59,7 +59,7 @@ class WebsocketTest extends TestCase
 {
     public function assertSocket($expectations, $data)
     {
-        while ($expected = array_shift($expectations)) {
+        while ($expected = \array_shift($expectations)) {
             $op = $expected[0];
             $content = $expected[1] ?? null;
 
@@ -68,13 +68,13 @@ class WebsocketTest extends TestCase
 
             $len = \ord($data[1]);
             if ($len === 0x7E) {
-                $len = unpack('n', $data[2] . $data[3])[1];
-                $data = substr($data, 4);
+                $len = \unpack('n', $data[2] . $data[3])[1];
+                $data = \substr($data, 4);
             } elseif ($len === 0x7F) {
-                $len = unpack('J', substr($data, 2, 8))[1];
-                $data = substr($data, 10);
+                $len = \unpack('J', \substr($data, 2, 8))[1];
+                $data = \substr($data, 10);
             } else {
-                $data = substr($data, 2);
+                $data = \substr($data, 2);
             }
 
             if (!$expectations) {
@@ -82,17 +82,17 @@ class WebsocketTest extends TestCase
             }
 
             if ($content !== null) {
-                $this->assertEquals($content, substr($data, 0, $len));
+                $this->assertEquals($content, \substr($data, 0, $len));
             }
 
-            $data = substr($data, $len);
+            $data = \substr($data, $len);
         }
     }
 
     public function initEndpoint(Websocket $application)
     {
         list($socket, $client) = Socket\pair();
-        stream_set_blocking($client, false);
+        \stream_set_blocking($client, false);
 
         $server = new Server(
             [$this->createMock(Socket\Server::class)],
@@ -131,8 +131,7 @@ class WebsocketTest extends TestCase
     {
         Loop::run(function () use ($data, $func) {
             /** @var Rfc6455Gateway $gateway */
-            list($gateway, $client, $socket, $server) = yield from $this->initEndpoint($ws = new class($this, $func) extends NullApplication
-            {
+            list($gateway, $client, $socket, $server) = yield from $this->initEndpoint($ws = new class($this, $func) extends NullApplication {
                 public $func;
                 public $gen;
 
@@ -219,7 +218,7 @@ class WebsocketTest extends TestCase
             // Time to read and write.
             yield new Delayed(10);
 
-            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE]], stream_get_contents($socket));
+            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE]], \stream_get_contents($socket));
 
             Loop::stop();
         });
@@ -263,7 +262,7 @@ class WebsocketTest extends TestCase
 
             /** @var Response $response */
             $response = yield $gateway->handleRequest($request);
-            $this->assertEquals($expectedHeaders, array_intersect_key($response->getHeaders(), $expectedHeaders));
+            $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
 
             if ($status === Status::SWITCHING_PROTOCOLS) {
                 $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
@@ -337,8 +336,7 @@ class WebsocketTest extends TestCase
     {
         Loop::run(function () use ($closeCallback) {
             list($gateway, $client, $sock, $server) = yield from $this->initEndpoint(
-                $ws = new class($this) extends NullApplication
-                {
+                $ws = new class($this) extends NullApplication {
                     public $closed = false;
 
                     public function onClose(int $clientId, int $code, string $reason)
@@ -363,20 +361,20 @@ class WebsocketTest extends TestCase
             yield new Delayed(10);
 
             $this->assertEquals(Code::NONE, $ws->closed);
-            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, ""]], stream_get_contents($sock));
+            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, ""]], \stream_get_contents($sock));
         });
     }
 
     public function testCloseWithStatus()
     {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
-            $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_CLOSE, pack("n", Code::GOING_AWAY));
+            $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_CLOSE, \pack("n", Code::GOING_AWAY));
 
             // Time to read, write, and close.
             yield new Delayed(10);
 
             $this->assertEquals(Code::GOING_AWAY, $ws->closed);
-            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, pack("n", Code::GOING_AWAY)]], stream_get_contents($sock));
+            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, \pack("n", Code::GOING_AWAY)]], \stream_get_contents($sock));
         });
     }
 
@@ -384,37 +382,37 @@ class WebsocketTest extends TestCase
     {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             // Fill the buffer to have the server not write the close frame immediately
-            $bytes = @fwrite($client->socket, str_repeat("*", 1 << 20));
+            $bytes = @\fwrite($client->socket, \str_repeat("*", 1 << 20));
 
             $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_CLOSE, "");
-            stream_socket_shutdown($sock, STREAM_SHUT_WR);
-            stream_get_contents($sock, $bytes);
+            \stream_socket_shutdown($sock, STREAM_SHUT_WR);
+            \stream_get_contents($sock, $bytes);
 
             // Time to read, write, and close.
             yield new Delayed(10);
 
             $this->assertEquals(Code::NONE, $ws->closed);
-            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, ""]], stream_get_contents($sock));
+            $this->assertSocket([[Rfc6455Gateway::OP_CLOSE, ""]], \stream_get_contents($sock));
         });
     }
 
     public function testHalfClose()
     {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
-            stream_socket_shutdown($sock, STREAM_SHUT_WR);
+            \stream_socket_shutdown($sock, STREAM_SHUT_WR);
 
             // Time to read, write, and close.
             yield new Delayed(10);
 
             $this->assertEquals(Code::ABNORMAL_CLOSE, $ws->closed);
-            $this->assertEquals("", stream_get_contents($sock));
+            $this->assertEquals("", \stream_get_contents($sock));
         });
     }
 
     public function testIOClose()
     {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
-            fclose($sock);
+            \fclose($sock);
 
             // Time to read, write, and close.
             yield new Delayed(10);
@@ -428,12 +426,12 @@ class WebsocketTest extends TestCase
         Loop::run(function () {
             list(, $client, $sock) = yield from $this->initEndpoint(new NullApplication);
 
-            fwrite($sock, WebsocketParserTest::compile(Rfc6455Gateway::OP_PING, true, "foo"));
+            \fwrite($sock, WebsocketParserTest::compile(Rfc6455Gateway::OP_PING, true, "foo"));
 
             yield $this->waitOnRead($sock);
             $client->socket->close();
 
-            $this->assertSocket([[Rfc6455Gateway::OP_PONG, "foo"]], stream_get_contents($sock));
+            $this->assertSocket([[Rfc6455Gateway::OP_PONG, "foo"]], \stream_get_contents($sock));
 
             Loop::stop();
         });
@@ -443,12 +441,11 @@ class WebsocketTest extends TestCase
     {
         Loop::run(function () {
             /** @var Rfc6455Gateway $gateway */
-            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class() extends Websocket
-            {
+            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class() extends Websocket {
                 public function onData(int $clientId, Message $msg)
                 {
                     // Fill send buffer
-                    $this->broadcast("foo" . str_repeat("*", 1 << 20));
+                    $this->broadcast("foo" . \str_repeat("*", 1 << 20));
                     $this->send("bar", $clientId);
                     yield $this->multicast("baz", [$clientId]);
                     $this->close($clientId);
@@ -474,16 +471,16 @@ class WebsocketTest extends TestCase
             $gateway->onParsedData($client, Rfc6455Gateway::OP_BIN, "start...", true);
             $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_PING, "pingpong");
 
-            stream_set_blocking($sock, false);
+            \stream_set_blocking($sock, false);
 
             $data = "";
             do {
                 yield $this->waitOnRead($sock); // to have it read and parsed...
-                $data .= fread($sock, 1024);
-            } while (!feof($sock));
+                $data .= \fread($sock, 1024);
+            } while (!\feof($sock));
 
             $this->assertSocket([
-                [Rfc6455Gateway::OP_TEXT, "foo" . str_repeat("*", 1 << 20)],
+                [Rfc6455Gateway::OP_TEXT, "foo" . \str_repeat("*", 1 << 20)],
                 [Rfc6455Gateway::OP_PONG, "pingpong"],
                 [Rfc6455Gateway::OP_TEXT, "bar"],
                 [Rfc6455Gateway::OP_TEXT, "baz"],
@@ -500,11 +497,11 @@ class WebsocketTest extends TestCase
             /** @var Rfc6455Gateway $gateway */
             list($gateway, $client, $sock, $server) = yield from $this->initEndpoint(new NullApplication);
 
-            $gateway->broadcast(str_repeat("*", 131046), true)->onResolve(function ($exception) use (
+            $gateway->broadcast(\str_repeat("*", 131046), true)->onResolve(function ($exception) use (
                 $sock,
                 $server
             ) {
-                stream_socket_shutdown($sock, STREAM_SHUT_WR);
+                \stream_socket_shutdown($sock, STREAM_SHUT_WR);
                 if ($exception) {
                     throw $exception;
                 }
@@ -513,10 +510,10 @@ class WebsocketTest extends TestCase
             $data = "";
             do {
                 yield $this->waitOnRead($sock); // to have it read and parsed...
-                $data .= $x = fread($sock, 8192);
-            } while ($x != "" || !feof($sock));
+                $data .= $x = \fread($sock, 8192);
+            } while ($x != "" || !\feof($sock));
 
-            $this->assertSocket([[Rfc6455Gateway::OP_BIN, str_repeat("*", 65523)], [Rfc6455Gateway::OP_CONT, str_repeat("*", 65523)]], $data);
+            $this->assertSocket([[Rfc6455Gateway::OP_BIN, \str_repeat("*", 65523)], [Rfc6455Gateway::OP_CONT, \str_repeat("*", 65523)]], $data);
 
             Loop::stop();
         });

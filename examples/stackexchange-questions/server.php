@@ -22,8 +22,7 @@ use Monolog\Logger;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-$websocket = new class extends Websocket
-{
+$websocket = new class extends Websocket {
     /** @var string|null */
     private $watcher;
 
