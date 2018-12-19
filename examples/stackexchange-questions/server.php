@@ -3,25 +3,27 @@
 // Note that this example requires amphp/artax, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
+use Amp\Artax\Client;
 use Amp\ByteStream\ResourceOutputStream;
-use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
-use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Server\Server;
+use Amp\Http\Server\StaticContent\DocumentRoot;
+use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket;
-use Psr\Log\NullLogger;
+use Amp\Success;
 use Monolog\Logger;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-$websocket = new class extends Websocket {
+$websocket = new class extends Websocket
+{
     /** @var string|null */
     private $watcher;
 
@@ -31,8 +33,8 @@ $websocket = new class extends Websocket {
     /** @var int|null */
     private $newestQuestion;
 
-    public function onStart(Server $server): Promise {
-        $promise = parent::onStart($server);
+    protected function afterOnStart(Server $server): Promise
+    {
         $this->http = new Amp\Artax\DefaultClient;
         $this->watcher = Loop::repeat(10000, function () {
             /** @var Response $response */
@@ -49,10 +51,18 @@ $websocket = new class extends Websocket {
             }
         });
 
-        return $promise;
+        return new Success;
     }
 
-    public function onHandshake(Request $request, Response $response) {
+    protected function beforeOnStop(Server $server): Promise
+    {
+        Loop::cancel($this->watcher);
+
+        return new Success;
+    }
+
+    public function onHandshake(Request $request, Response $response)
+    {
         if ($request->getHeader("origin") !== "http://localhost:1337") {
             $response->setStatus(403);
         }
@@ -60,9 +70,19 @@ $websocket = new class extends Websocket {
         return $response;
     }
 
-    public function onStop(Server $server): Promise {
-        Loop::cancel($this->watcher);
-        return parent::onStop($server);
+    public function onOpen(int $clientId, Request $request)
+    {
+        // do nothing
+    }
+
+    public function onData(int $clientId, Message $message)
+    {
+        // do nothing
+    }
+
+    public function onClose(int $clientId, int $code, string $reason)
+    {
+        // do nothing
     }
 };
 

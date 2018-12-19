@@ -8,15 +8,19 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Promise;
+use Amp\Success;
+use function Amp\call;
 
-abstract class Websocket implements RequestHandler, ServerObserver {
+abstract class Websocket implements RequestHandler, ServerObserver
+{
     /** @var Internal\Rfc6455Gateway */
     private $gateway;
 
     /**
      * Creates a responder that accepts websocket connections.
      */
-    public function __construct() {
+    public function __construct()
+    {
         $this->gateway = new Internal\Rfc6455Gateway($this);
     }
 
@@ -29,25 +33,22 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * Return an instance of \Amp\Http\Server\Response to reject the websocket connection request.
      *
-     * @param Request $request The HTTP request that instigated the handshake
+     * @param Request  $request The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Response|\Amp\Promise|\Generator Return the given response to accept the
-     *     connection or a new responseobject to deny the connection. May also return a
+     *     connection or a new response object to deny the connection. May also return a
      *     promise or generator to run as a coroutine.
      */
-    public function onHandshake(Request $request, Response $response) {
-        return $response;
-    }
+    abstract public function onHandshake(Request $request, Response $response);
 
     /**
      * Invoked when the full two-way websocket upgrade completes.
      *
-     * @param int $clientId A unique (to the current process) identifier for this client
+     * @param int     $clientId A unique (to the current process) identifier for this client
      * @param Request $request The HTTP request the instigated the connection.
      */
-    public function onOpen(int $clientId, Request $request) {
-    }
+    abstract public function onOpen(int $clientId, Request $request);
 
     /**
      * Invoked when data messages arrive from the client.
@@ -55,28 +56,27 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      * @param int     $clientId A unique (to the current process) identifier for this client
      * @param Message $message A stream of data received from the client
      */
-    public function onData(int $clientId, Message $message) {
-    }
+    abstract public function onData(int $clientId, Message $message);
 
     /**
      * Invoked when the close handshake completes.
      *
-     * @param int $clientId A unique (to the current process) identifier for this client
-     * @param int $code The websocket code describing the close
+     * @param int    $clientId A unique (to the current process) identifier for this client
+     * @param int    $code The websocket code describing the close
      * @param string $reason The reason for the close (may be empty)
      */
-    public function onClose(int $clientId, int $code, string $reason) {
-    }
+    abstract public function onClose(int $clientId, int $code, string $reason);
 
     /**
      * Send a UTF-8 text message to the given client.
      *
      * @param string $data Data to send.
-     * @param int $clientId
+     * @param int    $clientId
      *
      * @return \Amp\Promise<int>
      */
-    final public function send(string $data, int $clientId): Promise {
+    final public function send(string $data, int $clientId): Promise
+    {
         return $this->gateway->send($data, false, $clientId);
     }
 
@@ -84,11 +84,12 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      * Send a binary message to the given client.
      *
      * @param string $data Data to send.
-     * @param int $clientId
+     * @param int    $clientId
      *
      * @return \Amp\Promise<int>
      */
-    final public function sendBinary(string $data, int $clientId): Promise {
+    final public function sendBinary(string $data, int $clientId): Promise
+    {
         return $this->gateway->send($data, true, $clientId);
     }
 
@@ -96,11 +97,12 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
      *
      * @param string $data Data to send.
-     * @param int[] $exceptIds List of IDs to exclude from the broadcast.
+     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
-    final public function broadcast(string $data, array $exceptIds = []): Promise {
+    final public function broadcast(string $data, array $exceptIds = []): Promise
+    {
         return $this->gateway->broadcast($data, false, $exceptIds);
     }
 
@@ -108,46 +110,50 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      * Send a binary message to all clients (except those given in the optional array).
      *
      * @param string $data Data to send.
-     * @param int[] $exceptIds List of IDs to exclude from the broadcast.
+     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
-    final public function broadcastBinary(string $data, array $exceptIds = []): Promise {
+    final public function broadcastBinary(string $data, array $exceptIds = []): Promise
+    {
         return $this->gateway->broadcast($data, true, $exceptIds);
     }
 
     /**
      * Send a UTF-8 text message to a set of clients.
      *
-     * @param string $data Data to send.
+     * @param string     $data Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
-    final public function multicast(string $data, array $clientIds): Promise {
+    final public function multicast(string $data, array $clientIds): Promise
+    {
         return $this->gateway->multicast($data, false, $clientIds);
     }
 
     /**
      * Send a binary message to a set of clients.
      *
-     * @param string $data Data to send.
+     * @param string     $data Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
-    final public function multicastBinary(string $data, array $clientIds): Promise {
+    final public function multicastBinary(string $data, array $clientIds): Promise
+    {
         return $this->gateway->multicast($data, true, $clientIds);
     }
 
     /**
      * Close the client connection with a code and UTF-8 string reason.
      *
-     * @param int $clientId
-     * @param int $code
+     * @param int    $clientId
+     * @param int    $code
      * @param string $reason
      */
-    final public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = "") {
+    final public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '')
+    {
         $this->gateway->close($clientId, $code, $reason);
     }
 
@@ -169,19 +175,22 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *     'last_data_sent_at' => int,
      * ]
      */
-    final public function getInfo(int $clientId): array {
+    final public function getInfo(int $clientId): array
+    {
         return $this->gateway->getInfo($clientId);
     }
 
     /**
      * @return int[] Array of client IDs.
      */
-    final public function getClients(): array {
+    final public function getClients(): array
+    {
         return $this->gateway->getClients();
     }
 
     /** {@inheritdoc} */
-    final public function handleRequest(Request $request): Promise {
+    final public function handleRequest(Request $request): Promise
+    {
         return $this->gateway->respond($request);
     }
 
@@ -190,8 +199,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the size is less than 1.
      */
-    final public function setMessageSizeLimit(int $size) {
-        $this->gateway->setOption("maxMessageSize", $size);
+    final public function setMessageSizeLimit(int $size)
+    {
+        $this->gateway->setOption('maxMessageSize', $size);
     }
 
     /**
@@ -200,8 +210,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the number of bytes is less than 1.
      */
-    final public function setBytesPerMinuteLimit(int $bytes) {
-        $this->gateway->setOption("maxBytesPerMinute", $bytes);
+    final public function setBytesPerMinuteLimit(int $bytes)
+    {
+        $this->gateway->setOption('maxBytesPerMinute', $bytes);
     }
 
     /**
@@ -209,8 +220,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the size is less than 1.
      */
-    final public function setFrameSizeLimit(int $size) {
-        $this->gateway->setOption("maxFrameSize", $size);
+    final public function setFrameSizeLimit(int $size)
+    {
+        $this->gateway->setOption('maxFrameSize', $size);
     }
 
     /**
@@ -218,8 +230,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the count is less than 1.
      */
-    final public function setFramesPerSecondLimit(int $count) {
-        $this->gateway->setOption("maxFramesPerSecond", $count);
+    final public function setFramesPerSecondLimit(int $count)
+    {
+        $this->gateway->setOption('maxFramesPerSecond', $count);
     }
 
     /**
@@ -228,8 +241,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error
      */
-    final public function setFrameSplitThreshold(int $bytes) {
-        $this->gateway->setOption("autoFrameSize", $bytes);
+    final public function setFrameSplitThreshold(int $bytes)
+    {
+        $this->gateway->setOption('autoFrameSize', $bytes);
     }
 
     /**
@@ -237,8 +251,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the period is less than 1.
      */
-    final public function setHeartbeatPeriod(int $period) {
-        $this->gateway->setOption("heartbeatPeriod", $period);
+    final public function setHeartbeatPeriod(int $period)
+    {
+        $this->gateway->setOption('heartbeatPeriod', $period);
     }
 
     /**
@@ -247,8 +262,9 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the period is less than 1.
      */
-    final public function setClosePeriod(int $period) {
-        $this->gateway->setOption("closePeriod", $period);
+    final public function setClosePeriod(int $period)
+    {
+        $this->gateway->setOption('closePeriod', $period);
     }
 
     /**
@@ -256,31 +272,64 @@ abstract class Websocket implements RequestHandler, ServerObserver {
      *
      * @throws \Error If the limit is less than 1.
      */
-    final public function setQueuedPingLimit(int $limit) {
-        $this->gateway->setOption("queuedPingLimit", $limit);
+    final public function setQueuedPingLimit(int $limit)
+    {
+        $this->gateway->setOption('queuedPingLimit', $limit);
     }
 
     /**
      * @param bool $validate True to validate text frame data as UTF-8, false to skip validation. Default is true.
      */
-    final public function setValidateUtf8(bool $validate) {
-        $this->gateway->setOption("validateUtf8", $validate);
+    final public function setValidateUtf8(bool $validate)
+    {
+        $this->gateway->setOption('validateUtf8', $validate);
     }
 
     /**
      * @param bool $textOnly True to allow only text frames (no binary).
      */
-    final public function setTextOnly(bool $textOnly) {
-        $this->gateway->setOption("textOnly", $textOnly);
+    final public function setTextOnly(bool $textOnly)
+    {
+        $this->gateway->setOption('textOnly', $textOnly);
+    }
+
+    protected function beforeOnStart(Server $server): Promise
+    {
+        return new Success; // to be defined by child class
+    }
+
+    protected function afterOnStart(Server $server): Promise
+    {
+        return new Success; // to be defined by child class
     }
 
     /** {@inheritdoc} */
-    public function onStart(Server $server): Promise {
-        return $this->gateway->onStart($server);
+    final public function onStart(Server $server): Promise
+    {
+        return call(function () use ($server) {
+            yield $this->beforeOnStart($server);
+            yield $this->gateway->onStart($server);
+            yield $this->afterOnStart($server);
+        });
+    }
+
+    protected function beforeOnStop(Server $server): Promise
+    {
+        return new Success; // to be defined by child class
+    }
+
+    protected function afterOnStop(Server $server): Promise
+    {
+        return new Success; // to be defined by child class
     }
 
     /** {@inheritdoc} */
-    public function onStop(Server $server): Promise {
-        return $this->gateway->onStop($server);
+    final public function onStop(Server $server): Promise
+    {
+        return call(function () use ($server) {
+            yield $this->beforeOnStop($server);
+            yield $this->gateway->onStop($server);
+            yield $this->afterOnStop($server);
+        });
     }
 }
