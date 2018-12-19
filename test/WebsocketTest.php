@@ -23,18 +23,22 @@ use Amp\Socket;
 use League\Uri;
 use Psr\Log\NullLogger;
 
-class NullApplication extends Websocket {
+class NullApplication extends Websocket
+{
     /** @var TestCase */
     public $test;
 
-    public function __construct($test = null) {
+    public function __construct($test = null)
+    {
         parent::__construct();
         $this->test = $test;
     }
 }
 
-class WebsocketTest extends TestCase {
-    public function assertSocket($expectations, $data) {
+class WebsocketTest extends TestCase
+{
+    public function assertSocket($expectations, $data)
+    {
         while ($expected = array_shift($expectations)) {
             $op = $expected[0];
             $content = $expected[1] ?? null;
@@ -65,10 +69,9 @@ class WebsocketTest extends TestCase {
         }
     }
 
-    public function initEndpoint(Websocket $application) {
-        list($socket, $client) = stream_socket_pair(
-            \stripos(PHP_OS, "win") === 0 ? STREAM_PF_INET : STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP
-        );
+    public function initEndpoint(Websocket $application)
+    {
+        list($socket, $client) = Socket\pair();
         stream_set_blocking($client, false);
 
         $server = new Server(
@@ -88,7 +91,8 @@ class WebsocketTest extends TestCase {
         return [$gateway, $client, $socket, $server];
     }
 
-    public function waitOnRead($sock): Promise {
+    public function waitOnRead($sock): Promise
+    {
         $deferred = new Deferred;
         Loop::onReadable($sock, function ($watcherId) use ($deferred) {
             Loop::cancel($watcherId);
@@ -101,24 +105,30 @@ class WebsocketTest extends TestCase {
     /**
      * @dataProvider provideParsedData
      */
-    public function testParseData($data, $func) {
+    public function testParseData($data, $func)
+    {
         Loop::run(function () use ($data, $func) {
             /** @var Rfc6455Gateway $gateway */
-            list($gateway, $client, $socket, $server) = yield from $this->initEndpoint($ws = new class($this, $func) extends NullApplication {
+            list($gateway, $client, $socket, $server) = yield from $this->initEndpoint($ws = new class($this, $func) extends NullApplication
+            {
                 public $func;
                 public $gen;
 
-                public function __construct($test, $func) {
+                public function __construct($test, $func)
+                {
                     parent::__construct($test);
                     $this->func = $func;
                 }
 
-                public function onData(int $clientId, Message $msg) {
+                public function onData(int $clientId, Message $msg)
+                {
                     $this->gen = ($this->func)($clientId, $msg);
                     if ($this->gen instanceof \Generator) {
                         yield from $this->gen;
                     } else {
-                        ($this->gen = (function () { yield; })())->next(); // finished generator
+                        ($this->gen = (function () {
+                            yield;
+                        })())->next(); // finished generator
                     }
                 }
             });
@@ -135,17 +145,18 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function provideParsedData() {
+    public function provideParsedData()
+    {
         return [
             [[
-                ["foo", true]
+                ["foo", true],
             ], function (int $clientId, Message $message) {
                 $this->assertSame("foo", yield $message);
             }],
             [[
                 ["foo", false],
                 ["bar", true],
-                ["baz", true]
+                ["baz", true],
             ], function (int $clientId, Message $message) {
                 static $call = 0;
 
@@ -157,14 +168,15 @@ class WebsocketTest extends TestCase {
                 } else {
                     $this->assertEquals("baz", yield $message);
                 }
-            }]
+            }],
         ];
     }
 
     /**
      * @dataProvider provideErrorEvent
      */
-    public function testAppErrorClosesConnection(string $method, array $call = null) {
+    public function testAppErrorClosesConnection(string $method, array $call = null)
+    {
         Loop::run(function () use ($method, $call) {
             $application = $this->createMock(Websocket::class);
             $application->expects($this->once())
@@ -191,12 +203,13 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function provideErrorEvent(): array {
+    public function provideErrorEvent(): array
+    {
         return [
             ["onOpen", null],
             ["onData", ["onParsedData", [Rfc6455Gateway::OP_TEXT, "data", true]]],
             ["onClose", ["onParsedControlFrame", [Rfc6455Gateway::OP_CLOSE, "\xFF\xFF"]]],
-            ["onClose", ["onParsedError", [Code::PROTOCOL_ERROR, ""]]]
+            ["onClose", ["onParsedError", [Code::PROTOCOL_ERROR, ""]]],
         ];
     }
 
@@ -207,7 +220,8 @@ class WebsocketTest extends TestCase {
      *
      * @dataProvider provideHandshakes
      */
-    public function testHandshake(Request $request, int $status, array $expectedHeaders = []) {
+    public function testHandshake(Request $request, int $status, array $expectedHeaders = [])
+    {
         Loop::run(function () use ($request, $status, $expectedHeaders) {
             $server = new Server(
                 [$this->createMock(Socket\Server::class)],
@@ -237,7 +251,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function provideHandshakes(): array {
+    public function provideHandshakes(): array
+    {
         $testCases = [];
 
         $headers = [
@@ -245,7 +260,7 @@ class WebsocketTest extends TestCase {
             "sec-websocket-key" => ["x3JJHMbDL1EzLkh9GBhXDw=="],
             "sec-websocket-version" => ["13"],
             "upgrade" => ["websocket"],
-            "connection" => ["upgrade"]
+            "connection" => ["upgrade"],
         ];
 
         // 0 ----- valid Handshake request -------------------------------------------------------->
@@ -253,7 +268,7 @@ class WebsocketTest extends TestCase {
         $testCases[] = [$request, Status::SWITCHING_PROTOCOLS, [
             "upgrade" => ["websocket"],
             "connection" => ["upgrade"],
-            "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="]
+            "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
         ]];
 
         // 1 ----- error conditions: Handshake with POST method ----------------------------------->
@@ -296,13 +311,16 @@ class WebsocketTest extends TestCase {
         return $testCases;
     }
 
-    public function runClose(callable $closeCallback) {
+    public function runClose(callable $closeCallback)
+    {
         Loop::run(function () use ($closeCallback) {
             list($gateway, $client, $sock, $server) = yield from $this->initEndpoint(
-                $ws = new class($this) extends NullApplication {
+                $ws = new class($this) extends NullApplication
+                {
                     public $closed = false;
 
-                    public function onClose(int $clientId, int $code, string $reason) {
+                    public function onClose(int $clientId, int $code, string $reason)
+                    {
                         $this->closed = $code;
                     }
                 }
@@ -314,7 +332,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testCloseFrame() {
+    public function testCloseFrame()
+    {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_CLOSE, "");
 
@@ -326,7 +345,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testCloseWithStatus() {
+    public function testCloseWithStatus()
+    {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             $gateway->onParsedControlFrame($client, Rfc6455Gateway::OP_CLOSE, pack("n", Code::GOING_AWAY));
 
@@ -338,7 +358,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testCloseFrameWithHalfClose() {
+    public function testCloseFrameWithHalfClose()
+    {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             // Fill the buffer to have the server not write the close frame immediately
             $bytes = @fwrite($client->socket, str_repeat("*", 1 << 20));
@@ -355,7 +376,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testHalfClose() {
+    public function testHalfClose()
+    {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             stream_socket_shutdown($sock, STREAM_SHUT_WR);
 
@@ -367,7 +389,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testIOClose() {
+    public function testIOClose()
+    {
         $this->runClose(function (Rfc6455Gateway $gateway, $sock, $ws, $client) {
             fclose($sock);
 
@@ -378,7 +401,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testIORead() {
+    public function testIORead()
+    {
         Loop::run(function () {
             list(, $client, $sock) = yield from $this->initEndpoint(new NullApplication);
 
@@ -393,13 +417,16 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testMultiWrite() {
+    public function testMultiWrite()
+    {
         Loop::run(function () {
             /** @var Rfc6455Gateway $gateway */
-            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class() extends Websocket {
-                public function onData(int $clientId, Message $msg) {
+            list($gateway, $client, $sock) = yield from $this->initEndpoint($ws = new class() extends Websocket
+            {
+                public function onData(int $clientId, Message $msg)
+                {
                     // Fill send buffer
-                    $this->broadcast("foo".str_repeat("*", 1 << 20));
+                    $this->broadcast("foo" . str_repeat("*", 1 << 20));
                     $this->send("bar", $clientId);
                     yield $this->multicast("baz", [$clientId]);
                     $this->close($clientId);
@@ -419,7 +446,7 @@ class WebsocketTest extends TestCase {
             } while (!feof($sock));
 
             $this->assertSocket([
-                [Rfc6455Gateway::OP_TEXT, "foo".str_repeat("*", 1 << 20)],
+                [Rfc6455Gateway::OP_TEXT, "foo" . str_repeat("*", 1 << 20)],
                 [Rfc6455Gateway::OP_PONG, "pingpong"],
                 [Rfc6455Gateway::OP_TEXT, "bar"],
                 [Rfc6455Gateway::OP_TEXT, "baz"],
@@ -430,7 +457,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testFragmentation() {
+    public function testFragmentation()
+    {
         Loop::run(function () {
             /** @var Rfc6455Gateway $gateway */
             list($gateway, $client, $sock, $server) = yield from $this->initEndpoint(new NullApplication);
@@ -454,7 +482,8 @@ class WebsocketTest extends TestCase {
         });
     }
 
-    public function testSinglePong() {
+    public function testSinglePong()
+    {
         Loop::run(function () {
             /** @var Rfc6455Gateway $gateway */
             list($gateway, $client, $socket, $server) = yield from $this->initEndpoint(new NullApplication);
