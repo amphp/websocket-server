@@ -100,7 +100,9 @@ class WebsocketTest extends TestCase
             new NullLogger
         );
 
-        $gateway = new Rfc6455Gateway($application);
+        $gatewayProperty = new \ReflectionProperty(Websocket::class, 'gateway');
+        $gatewayProperty->setAccessible(true);
+        $gateway = $gatewayProperty->getValue($application) ?? new Rfc6455Gateway($application); // null in case of mocks
 
         yield $gateway->onStart($server);
 
@@ -260,7 +262,7 @@ class WebsocketTest extends TestCase
             yield $gateway->onStart($server);
 
             /** @var Response $response */
-            $response = yield $gateway->respond($request);
+            $response = yield $gateway->handleRequest($request);
             $this->assertEquals($expectedHeaders, array_intersect_key($response->getHeaders(), $expectedHeaders));
 
             if ($status === Status::SWITCHING_PROTOCOLS) {
@@ -498,7 +500,10 @@ class WebsocketTest extends TestCase
             /** @var Rfc6455Gateway $gateway */
             list($gateway, $client, $sock, $server) = yield from $this->initEndpoint(new NullApplication);
 
-            $gateway->broadcast(str_repeat("*", 131046), true)->onResolve(function ($exception) use ($sock, $server) {
+            $gateway->broadcast(str_repeat("*", 131046), true)->onResolve(function ($exception) use (
+                $sock,
+                $server
+            ) {
                 stream_socket_shutdown($sock, STREAM_SHUT_WR);
                 if ($exception) {
                     throw $exception;
