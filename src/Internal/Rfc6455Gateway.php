@@ -752,6 +752,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';
+        $savedOpcode = null;
         $compressed = false;
 
         $buffer = yield;
@@ -970,6 +971,11 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
                 if (!$final) {
                     $savedBuffer = $payload;
                     $frames++;
+
+                    if ($opcode !== self::OP_CONT) {
+                        $savedOpcode = $opcode;
+                    }
+
                     continue;
                 }
 
@@ -1009,8 +1015,11 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
                 }
             }
 
+            $opcode = $savedOpcode ?? $opcode;
+
             if ($final) {
                 $dataMsgBytesRecd = 0;
+                $savedOpcode = null;
             }
 
             $this->onParsedData($client, $opcode, $payload, $final);

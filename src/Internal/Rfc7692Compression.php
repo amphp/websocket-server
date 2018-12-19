@@ -54,18 +54,17 @@ class Rfc7692Compression
                     break;
 
                 case 'client_max_window_bits':
-                    if (!isset($parts[1])) {
-                        break; // Use default value.
+                    if (isset($parts[1])) {
+                        $value = (int) $parts[1];
+
+                        if ($value < 8 || $value > 15) {
+                            return null; // Invalid option value.
+                        }
+
+                        $clientWindowSize = $value;
                     }
 
-                    $value = (int) $parts[1];
-
-                    if ($value <= 8 || $value >= 15) {
-                        return null; // Invalid option value.
-                    }
-
-                    $clientWindowSize = $value;
-                    $headerOut .= '; client_max_window_bits=' . $value;
+                    $headerOut .= '; client_max_window_bits=' . $clientWindowSize;
                     break;
 
                 case 'client_no_context_takeover':
@@ -74,18 +73,17 @@ class Rfc7692Compression
                     break;
 
                 case 'server_max_window_bits':
-                    if (!isset($parts[1])) {
-                        break; // Use default value.
+                    if (isset($parts[1])) {
+                        $value = (int) $parts[1];
+
+                        if ($value < 8 || $value > 15) {
+                            return null; // Invalid option value.
+                        }
+
+                        $serverWindowSize = $value;
                     }
 
-                    $value = (int) $parts[1];
-
-                    if ($value <= 9 || $value >= 15) { // Window of 8 fails deflate_init()
-                        return null; // Invalid option value.
-                    }
-
-                    $serverWindowSize = $value;
-                    $headerOut .= '; server_max_window_bits=' . $value;
+                    $headerOut .= '; server_max_window_bits=' . $serverWindowSize;
                     break;
 
                 case 'server_no_context_takeover':
