@@ -990,7 +990,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
                     $valid = \preg_match('//u', $payload);
                 } else {
                     for ($i = 0; !($valid = \preg_match('//u', $payload)); $i++) {
-                        $savedBuffer .= \substr($payload, -1);
+                        $savedBuffer = \substr($payload, -1) . $savedBuffer;
                         $payload = \substr($payload, 0, -1);
 
                         if ($i === 3) { // Remove a maximum of three bytes
