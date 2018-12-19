@@ -12,10 +12,10 @@ use Amp\Failure;
 use Amp\Http\Server\ClientException;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
+use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
-use Amp\Http\Server\Websocket\Application;
 use Amp\Http\Server\Websocket\Code;
 use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
@@ -26,7 +26,8 @@ use Amp\Success;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 
-class Rfc6455Gateway implements ServerObserver {
+class Rfc6455Gateway implements RequestHandler, ServerObserver
+{
     use CallableMaker;
 
     const ACCEPT_CONCAT = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -34,11 +35,8 @@ class Rfc6455Gateway implements ServerObserver {
     /** @var PsrLogger */
     private $logger;
 
-    /** @var Application */
-    private $application;
-
-    /** @var Rfc6455Endpoint */
-    private $endpoint;
+    /** @var Websocket */
+    private $websocket;
 
     /** @var ErrorHandler */
     private $errorHandler;
@@ -61,7 +59,7 @@ class Rfc6455Gateway implements ServerObserver {
     /** @var int */
     private $now;
 
-    private $autoFrameSize = (64 << 10) - 9 /* frame overhead */;
+    private $autoFrameSize = (64 << 10) - 9; // frame overhead
     private $maxBytesPerMinute = 8 << 20;
     private $maxFrameSize = 2 << 20;
     private $maxMessageSize = 2 << 20;
@@ -74,22 +72,23 @@ class Rfc6455Gateway implements ServerObserver {
     private $compressionEnabled;
 
     // Frame control bits
-    const FIN      = 0b1;
+    const FIN = 0b1;
     const RSV_NONE = 0b000;
-    const OP_CONT  = 0x00;
-    const OP_TEXT  = 0x01;
-    const OP_BIN   = 0x02;
+    const OP_CONT = 0x00;
+    const OP_TEXT = 0x01;
+    const OP_BIN = 0x02;
     const OP_CLOSE = 0x08;
-    const OP_PING  = 0x09;
-    const OP_PONG  = 0x0A;
+    const OP_PING = 0x09;
+    const OP_PONG = 0x0A;
 
-    public function __construct(Websocket $application) {
-        $this->application = $application;
-        $this->endpoint = new Rfc6455Endpoint($this);
+    public function __construct(Websocket $application)
+    {
+        $this->websocket = $application;
         $this->compressionEnabled = \extension_loaded('zlib');
     }
 
-    public function setOption(string $option, $value) {
+    public function setOption(string $option, $value)
+    {
         switch ($option) {
             case 'maxBytesPerMinute':
             case 'autoFrameSize':
@@ -116,11 +115,13 @@ class Rfc6455Gateway implements ServerObserver {
         $this->{$option} = $value;
     }
 
-    public function respond(Request $request): Promise {
+    public function handleRequest(Request $request): Promise
+    {
         return new Coroutine($this->do($request));
     }
 
-    private function do(Request $request): \Generator {
+    private function do(Request $request): \Generator
+    {
         /** @var \Amp\Http\Server\Response $response */
         if ($request->getMethod() !== 'GET') {
             $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
@@ -203,12 +204,12 @@ class Rfc6455Gateway implements ServerObserver {
             }
         }
 
-        $response = yield call([$this->application, 'onHandshake'], $request, $response);
+        $response = yield call([$this->websocket, 'onHandshake'], $request, $response);
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
                 '%s::onHandshake() must return or resolve to an instance of %s, %s returned',
-                Application::class,
+                Websocket::class,
                 Response::class,
                 \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
             ));
@@ -252,7 +253,8 @@ class Rfc6455Gateway implements ServerObserver {
         return $client;
     }
 
-    private function read(Rfc6455Client $client): \Generator {
+    private function read(Rfc6455Client $client): \Generator
+    {
         while (($chunk = yield $client->socket->read()) !== null) {
             if ($client->parser === null) {
                 return;
@@ -294,7 +296,8 @@ class Rfc6455Gateway implements ServerObserver {
         $this->unloadClient($client);
     }
 
-    private function onAppError(int $clientId, \Throwable $e): \Generator {
+    private function onAppError(int $clientId, \Throwable $e): \Generator
+    {
         $this->logger->error((string) $e);
         $code = Code::UNEXPECTED_SERVER_ERROR;
         $reason = 'Internal server error, aborting';
@@ -303,7 +306,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
     }
 
-    private function doClose(Rfc6455Client $client, int $code, string $reason): \Generator {
+    private function doClose(Rfc6455Client $client, int $code, string $reason): \Generator
+    {
         // Only proceed if we haven't already begun the close handshake elsewhere
         if ($client->closedAt) {
             return 0;
@@ -331,38 +335,43 @@ class Rfc6455Gateway implements ServerObserver {
         return $bytes;
     }
 
-    private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise {
+    private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise
+    {
         \assert($code !== Code::NONE || $msg === '');
         $promise = $this->write($client, $code !== Code::NONE ? pack('n', $code) . $msg : '', self::OP_CLOSE);
         $client->closedAt = $this->now;
         return $promise;
     }
 
-    private function tryAppOnOpen(int $clientId, Request $request): \Generator {
+    private function tryAppOnOpen(int $clientId, Request $request): \Generator
+    {
         try {
-            yield call([$this->application, 'onOpen'], $clientId, $request);
+            yield call([$this->websocket, 'onOpen'], $clientId, $request);
         } catch (\Throwable $e) {
             yield from $this->onAppError($clientId, $e);
         }
     }
 
-    private function tryAppOnData(Rfc6455Client $client, Message $msg): \Generator {
+    private function tryAppOnData(Rfc6455Client $client, Message $msg): \Generator
+    {
         try {
-            yield call([$this->application, 'onData'], $client->id, $msg);
+            yield call([$this->websocket, 'onData'], $client->id, $msg);
         } catch (\Throwable $e) {
             yield from $this->onAppError($client->id, $e);
         }
     }
 
-    private function tryAppOnClose(int $clientId, int $code, string $reason): \Generator {
+    private function tryAppOnClose(int $clientId, int $code, string $reason): \Generator
+    {
         try {
-            yield call([$this->application, 'onClose'], $clientId, $code, $reason);
+            yield call([$this->websocket, 'onClose'], $clientId, $code, $reason);
         } catch (\Throwable $e) {
             yield from $this->onAppError($clientId, $e);
         }
     }
 
-    private function unloadClient(Rfc6455Client $client) {
+    private function unloadClient(Rfc6455Client $client)
+    {
         $client->parser = null;
 
         $id = $client->id;
@@ -380,7 +389,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
     }
 
-    public function onParsedControlFrame(Rfc6455Client $client, int $opcode, string $data) {
+    public function onParsedControlFrame(Rfc6455Client $client, int $opcode, string $data)
+    {
         // something went that wrong that we had to close... if parser has anything left, we don't care!
         if ($client->closedAt) {
             return;
@@ -433,7 +443,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
     }
 
-    public function onParsedData(Rfc6455Client $client, int $opcode, string $data, bool $terminated) {
+    public function onParsedData(Rfc6455Client $client, int $opcode, string $data, bool $terminated)
+    {
         // something went that wrong that we had to close... if parser has anything left, we don't care!
         if ($client->closedAt) {
             return;
@@ -478,7 +489,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
     }
 
-    public function onParsedError(Rfc6455Client $client, int $code, string $msg) {
+    public function onParsedError(Rfc6455Client $client, int $code, string $msg)
+    {
         // something went that wrong that we had to close... if parser has anything left, we don't care!
         if ($client->closedAt) {
             return;
@@ -487,7 +499,8 @@ class Rfc6455Gateway implements ServerObserver {
         Promise\rethrow(new Coroutine($this->doClose($client, $code, $msg)));
     }
 
-    private function compile(string $msg, int $opcode, int $rsv, bool $fin): string {
+    private function compile(string $msg, int $opcode, int $rsv, bool $fin): string
+    {
         $len = \strlen($msg);
         $w = \chr(($fin << 7) | ($rsv << 4) | $opcode);
 
@@ -502,7 +515,8 @@ class Rfc6455Gateway implements ServerObserver {
         return $w . $msg;
     }
 
-    private function write(Rfc6455Client $client, string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise {
+    private function write(Rfc6455Client $client, string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise
+    {
         if ($client->closedAt) {
             return new Failure(new ClientException);
         }
@@ -516,7 +530,8 @@ class Rfc6455Gateway implements ServerObserver {
         return $client->socket->write($frame);
     }
 
-    public function send(string $data, bool $binary, int $clientId): Promise {
+    public function send(string $data, bool $binary, int $clientId): Promise
+    {
         if (!isset($this->clients[$clientId])) {
             return new Success;
         }
@@ -530,7 +545,8 @@ class Rfc6455Gateway implements ServerObserver {
         return $client->lastWrite = new Coroutine($this->doSend($client, $data, $opcode));
     }
 
-    private function doSend(Rfc6455Client $client, string $data, int $opcode): \Generator {
+    private function doSend(Rfc6455Client $client, string $data, int $opcode): \Generator
+    {
         if ($client->lastWrite) {
             yield $client->lastWrite;
         }
@@ -568,7 +584,8 @@ class Rfc6455Gateway implements ServerObserver {
         return $bytes;
     }
 
-    public function broadcast(string $data, bool $binary, array $exceptIds = []): Promise {
+    public function broadcast(string $data, bool $binary, array $exceptIds = []): Promise
+    {
         $promises = [];
         if (empty($exceptIds)) {
             foreach ($this->clients as $id => $client) {
@@ -591,7 +608,8 @@ class Rfc6455Gateway implements ServerObserver {
         return Promise\all($promises);
     }
 
-    public function multicast(string $data, bool $binary, array $clientIds): Promise {
+    public function multicast(string $data, bool $binary, array $clientIds): Promise
+    {
         $promises = [];
         foreach ($clientIds as $id) {
             $promises[] = $this->send($data, $binary, $id);
@@ -599,13 +617,15 @@ class Rfc6455Gateway implements ServerObserver {
         return Promise\all($promises);
     }
 
-    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '') {
+    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '')
+    {
         if (isset($this->clients[$clientId])) {
             Promise\rethrow(new Coroutine($this->doClose($this->clients[$clientId], $code, $reason)));
         }
     }
 
-    public function getInfo(int $clientId): array {
+    public function getInfo(int $clientId): array
+    {
         if (!isset($this->clients[$clientId])) {
             return [];
         }
@@ -613,29 +633,31 @@ class Rfc6455Gateway implements ServerObserver {
         $client = $this->clients[$clientId];
 
         return [
-            'bytes_read'    => $client->bytesRead,
-            'bytes_sent'    => $client->bytesSent,
-            'frames_read'   => $client->framesRead,
-            'frames_sent'   => $client->framesSent,
+            'bytes_read' => $client->bytesRead,
+            'bytes_sent' => $client->bytesSent,
+            'frames_read' => $client->framesRead,
+            'frames_sent' => $client->framesSent,
             'messages_read' => $client->messagesRead,
             'messages_sent' => $client->messagesSent,
-            'connected_at'  => $client->connectedAt,
-            'closed_at'     => $client->closedAt,
-            'close_code'    => $client->closeCode,
-            'close_reason'  => $client->closeReason,
-            'last_read_at'  => $client->lastReadAt,
-            'last_sent_at'  => $client->lastSentAt,
-            'last_data_read_at'  => $client->lastDataReadAt,
-            'last_data_sent_at'  => $client->lastDataSentAt,
+            'connected_at' => $client->connectedAt,
+            'closed_at' => $client->closedAt,
+            'close_code' => $client->closeCode,
+            'close_reason' => $client->closeReason,
+            'last_read_at' => $client->lastReadAt,
+            'last_sent_at' => $client->lastSentAt,
+            'last_data_read_at' => $client->lastDataReadAt,
+            'last_data_sent_at' => $client->lastDataSentAt,
             'compression_enabled' => (bool) $client->compressionContext,
         ];
     }
 
-    public function getClients(): array {
+    public function getClients(): array
+    {
         return array_keys($this->clients);
     }
 
-    public function onStart(Server $server): Promise {
+    public function onStart(Server $server): Promise
+    {
         $this->logger = $server->getLogger();
         $this->errorHandler = $server->getErrorHandler();
 
@@ -644,7 +666,8 @@ class Rfc6455Gateway implements ServerObserver {
         return new Success;
     }
 
-    public function onStop(Server $server): Promise {
+    public function onStop(Server $server): Promise
+    {
         $code = Code::GOING_AWAY;
         $reason = "Server shutting down!";
 
@@ -656,7 +679,8 @@ class Rfc6455Gateway implements ServerObserver {
         return Promise\all($promises);
     }
 
-    private function sendHeartbeatPing(Rfc6455Client $client) {
+    private function sendHeartbeatPing(Rfc6455Client $client)
+    {
         if ($client->pingCount - $client->pongCount > $this->queuedPingLimit) {
             $code = Code::POLICY_VIOLATION;
             $reason = 'Exceeded unanswered PING limit';
@@ -666,7 +690,8 @@ class Rfc6455Gateway implements ServerObserver {
         }
     }
 
-    private function timeout(int $now) {
+    private function timeout(int $now)
+    {
         $this->now = $now;
 
         foreach ($this->closeTimeouts as $clientId => $expiryTime) {
@@ -718,7 +743,8 @@ class Rfc6455Gateway implements ServerObserver {
      *
      * @return \Generator
      */
-    public function parser(Rfc6455Client $client, array $options = []): \Generator {
+    public function parser(Rfc6455Client $client, array $options = []): \Generator
+    {
         $maxFrameSize = $options['max_frame_size'] ?? PHP_INT_MAX;
         $maxMessageSize = $options['max_msg_size'] ?? PHP_INT_MAX;
         $textOnly = $options['text_only'] ?? false;

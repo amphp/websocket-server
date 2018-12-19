@@ -14,8 +14,10 @@ use Amp\Http\Server\Websocket\Websocket;
 use Amp\PHPUnit\TestCase;
 use Amp\Socket\Socket;
 
-class WebsocketParserTest extends TestCase {
-    public static function compile($opcode, $fin, $msg = "", $rsv = 0b000) {
+class WebsocketParserTest extends TestCase
+{
+    public static function compile($opcode, $fin, $msg = "", $rsv = 0b000)
+    {
         $len = \strlen($msg);
 
         // FRRROOOO per RFC 6455 Section 5.2
@@ -41,23 +43,42 @@ class WebsocketParserTest extends TestCase {
     /**
      * @dataProvider provideParserData
      */
-    public function testParser($msg, array $message = null, array $error = null) {
+    public function testParser($msg, array $message = null, array $error = null)
+    {
         if ($message) {
-            $websocket = new class($this, ...$message) extends Websocket {
+            $websocket = new class($this, ...$message) extends Websocket
+            {
                 private $test;
                 private $data;
                 private $binary;
 
-                public function __construct(TestCase $test, string $data, bool $isBinary) {
+                public function __construct(TestCase $test, string $data, bool $isBinary)
+                {
                     parent::__construct();
                     $this->test = $test;
                     $this->data = $data;
                     $this->binary = $isBinary;
                 }
 
-                public function onData(int $clientId, Message $msg) {
+                public function onData(int $clientId, Message $msg)
+                {
                     $this->test->assertSame($this->data, yield $msg);
                     $this->test->assertSame($this->binary, $msg->isBinary());
+                }
+
+                public function onHandshake(Request $request, Response $response)
+                {
+                    // nothing
+                }
+
+                public function onOpen(int $clientId, Request $request)
+                {
+                    // nothing
+                }
+
+                public function onClose(int $clientId, int $code, string $reason)
+                {
+                    // nothing
                 }
             };
         } else {
@@ -77,7 +98,8 @@ class WebsocketParserTest extends TestCase {
         $this->assertSame($error[1] ?? null, $client->closeCode);
     }
 
-    public function provideParserData() {
+    public function provideParserData()
+    {
         $return = [];
 
         // 0-13 -- basic text and binary frames with fixed lengths -------------------------------->
@@ -136,13 +158,13 @@ class WebsocketParserTest extends TestCase {
 
         // 31 ---- utf-8 validation must resolve for large utf-8 msgs ----------------------------->
 
-        $data = "H".str_repeat("ö", 32770);
+        $data = "H" . str_repeat("ö", 32770);
         $input = static::compile(Rfc6455Gateway::OP_TEXT, false, substr($data, 0, 32769)) . static::compile(Rfc6455Gateway::OP_CONT, true, substr($data, 32769));
         $return[] = [$input, [$data, Rfc6455Gateway::OP_TEXT]];
 
         // 32 ---- utf-8 validation must resolve for interrupted utf-8 across frame boundary ------>
 
-        $data = "H".str_repeat("ö", 32770);
+        $data = "H" . str_repeat("ö", 32770);
         $input = static::compile(Rfc6455Gateway::OP_TEXT, false, substr($data, 0, 32768)) . static::compile(Rfc6455Gateway::OP_CONT, true, substr($data, 32768));
         $return[] = [$input, [$data, Rfc6455Gateway::OP_TEXT]];
 
@@ -153,13 +175,13 @@ class WebsocketParserTest extends TestCase {
 
         // 34 ---- utf-8 validation must fail for bad utf-8 data (multiple small frames) ---------->
 
-        $data = "H".str_repeat("ö", 3);
+        $data = "H" . str_repeat("ö", 3);
         $input = static::compile(Rfc6455Gateway::OP_TEXT, false, substr($data, 0, 2)) . static::compile(Rfc6455Gateway::OP_CONT, true, substr($data, 3));
         $return[] = [$input, null, ["Invalid TEXT data; UTF-8 required", Code::INCONSISTENT_FRAME_DATA_TYPE]];
 
         // 35 ---- utf-8 validation must fail for bad utf-8 data (multiple big frames) ------------>
 
-        $data = "H".str_repeat("ö", 40000);
+        $data = "H" . str_repeat("ö", 40000);
         $input = static::compile(Rfc6455Gateway::OP_TEXT, false, substr($data, 0, 32767)) . static::compile(Rfc6455Gateway::OP_CONT, false, substr($data, 32768));
         $return[] = [$input, null, ["Invalid TEXT data; UTF-8 required", Code::INCONSISTENT_FRAME_DATA_TYPE]];
 
@@ -181,7 +203,7 @@ class WebsocketParserTest extends TestCase {
 
         // 39 ---- utf-8 must be accepted for interrupted text with interleaved control frame ----->
 
-        $data = "H".str_repeat("ö", 32770);
+        $data = "H" . str_repeat("ö", 32770);
         $input = static::compile(Rfc6455Gateway::OP_TEXT, false, substr($data, 0, 32768)) . static::compile(Rfc6455Gateway::OP_PING, true, "foo") . static::compile(Rfc6455Gateway::OP_CONT, true, substr($data, 32768));
         $return[] = [$input, [$data, Rfc6455Gateway::OP_TEXT]];
 

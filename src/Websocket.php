@@ -191,7 +191,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /** {@inheritdoc} */
     final public function handleRequest(Request $request): Promise
     {
-        return $this->gateway->respond($request);
+        return $this->gateway->handleRequest($request);
     }
 
     /**

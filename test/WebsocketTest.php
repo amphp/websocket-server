@@ -33,6 +33,26 @@ class NullApplication extends Websocket
         parent::__construct();
         $this->test = $test;
     }
+
+    public function onHandshake(Request $request, Response $response)
+    {
+        // nothing
+    }
+
+    public function onOpen(int $clientId, Request $request)
+    {
+        // nothing
+    }
+
+    public function onData(int $clientId, Message $message)
+    {
+        // nothing
+    }
+
+    public function onClose(int $clientId, int $code, string $reason)
+    {
+        // nothing
+    }
 }
 
 class WebsocketTest extends TestCase
@@ -430,6 +450,21 @@ class WebsocketTest extends TestCase
                     $this->send("bar", $clientId);
                     yield $this->multicast("baz", [$clientId]);
                     $this->close($clientId);
+                }
+
+                public function onHandshake(Request $request, Response $response)
+                {
+                    // nothing
+                }
+
+                public function onOpen(int $clientId, Request $request)
+                {
+                    // nothing
+                }
+
+                public function onClose(int $clientId, int $code, string $reason)
+                {
+                    // nothing
                 }
             });
 

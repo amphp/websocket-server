@@ -2,7 +2,8 @@
 
 namespace Amp\Http\Server\Websocket\Internal;
 
-class Rfc7692Compression {
+class Rfc7692Compression
+{
     const RSV = 0b100;
     const DEFAULT_WINDOW_SIZE = 15;
     const EMPTY_BLOCK = "\x0\x0\xff\xff";
@@ -22,7 +23,8 @@ class Rfc7692Compression {
      *
      * @return \Amp\Http\Server\Websocket\Internal\Rfc7692Compression|null
      */
-    public static function fromHeader(string $headerIn, string &$headerOut = null) { /* : ?self */
+    public static function fromHeader(string $headerIn, string &$headerOut = null)
+    { /* : ?self */
         $headerIn = \explode(';', \strtolower($headerIn));
         $headerIn = \array_map('trim', $headerIn);
 
@@ -117,7 +119,8 @@ class Rfc7692Compression {
         }
     }
 
-    public function decompress(string $data) { /* : ?string */
+    public function decompress(string $data)
+    { /* : ?string */
         $data = \inflate_add(
             $this->inflate,
             $data . self::EMPTY_BLOCK,
@@ -131,7 +134,8 @@ class Rfc7692Compression {
         return $data;
     }
 
-    public function compress(string $data): string {
+    public function compress(string $data): string
+    {
         $data = \deflate_add($this->deflate, $data, $this->serverContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH);
         if ($data === false) {
             throw new \RuntimeException('Failed to compress data');
