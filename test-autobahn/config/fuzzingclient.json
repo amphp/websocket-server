@@ -1,7 +1,7 @@
 {
     "servers": [
         {
-            "agent": "Aerys",
+            "agent": "amphp-websocket-server",
             "url": "ws://127.0.0.1:9001/"
         }
     ],

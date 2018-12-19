@@ -14,12 +14,12 @@ if (!file_exists(REPORT_PATH)) {
 $report = file_get_contents(REPORT_PATH);
 $report = json_decode($report, true);
 
-if (!isset($report["Aerys"])) {
-    $climate->red("Could not find result set for Aerys");
+if (!isset($report["amphp-websocket-server"])) {
+    $climate->red("Could not find result set for amphp-websocket-server");
     exit(1);
 }
 
-$report = $report["Aerys"];
+$report = $report["amphp-websocket-server"];
 
 $climate->out("Autobahn test report:");
 

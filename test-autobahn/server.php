@@ -12,32 +12,30 @@ use Psr\Log\NullLogger;
 Amp\Loop::run(function () {
     /* --- http://localhost:9001/ ------------------------------------------------------------------- */
 
-    $websocket = new Websocket\Websocket(new class implements Websocket\Application {
-        /** @var \Amp\Http\Server\Websocket\Endpoint */
-        private $endpoint;
-
-        public function onStart(Websocket\Endpoint $endpoint) {
-            $this->endpoint = $endpoint;
-        }
-
-        public function onHandshake(Request $request, Response $response) {
+    $websocket = new class extends Websocket\Websocket
+    {
+        public function onHandshake(Request $request, Response $response)
+        {
             return $response;
         }
 
-        public function onOpen(int $clientId, Request $request) { }
+        public function onOpen(int $clientId, Request $request)
+        {
+        }
 
-        public function onData(int $clientId, Websocket\Message $message) {
+        public function onData(int $clientId, Websocket\Message $message)
+        {
             if ($message->isBinary()) {
-                $this->endpoint->broadcastBinary(yield $message->buffer());
+                $this->broadcastBinary(yield $message->buffer());
             } else {
-                $this->endpoint->broadcast(yield $message->buffer());
+                $this->broadcast(yield $message->buffer());
             }
         }
 
-        public function onClose(int $clientId, int $code, string $reason) { }
-
-        public function onStop() { }
-    });
+        public function onClose(int $clientId, int $code, string $reason)
+        {
+        }
+    };
 
     $websocket->setBytesPerMinuteLimit(PHP_INT_MAX);
     $websocket->setFrameSizeLimit(PHP_INT_MAX);
