@@ -4,7 +4,6 @@
 // amphp/http-server-static-content and amphp/log to be installed.
 
 use Amp\Artax\Client;
-use Amp\ByteStream\ResourceOutputStream;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
@@ -19,8 +18,9 @@ use Amp\Promise;
 use Amp\Socket;
 use Amp\Success;
 use Monolog\Logger;
+use function Amp\ByteStream\getStdout;
 
-require __DIR__ . "/../../vendor/autoload.php";
+require __DIR__ . '/../../vendor/autoload.php';
 
 $websocket = new class extends Websocket {
     /** @var string|null */
@@ -42,9 +42,9 @@ $websocket = new class extends Websocket {
 
             $data = \json_decode($json, true);
 
-            foreach (\array_reverse($data["items"]) as $question) {
-                if ($this->newestQuestion === null || $question["question_id"] > $this->newestQuestion) {
-                    $this->newestQuestion = $question["question_id"];
+            foreach (\array_reverse($data['items']) as $question) {
+                if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
+                    $this->newestQuestion = $question['question_id'];
                     $this->broadcast(\json_encode($question));
                 }
             }
@@ -62,7 +62,7 @@ $websocket = new class extends Websocket {
 
     public function onHandshake(Request $request, Response $response)
     {
-        if ($request->getHeader("origin") !== "http://localhost:1337") {
+        if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
         }
 
@@ -85,22 +85,19 @@ $websocket = new class extends Websocket {
     }
 };
 
-$servers = [
-    Socket\listen("0.0.0.0:1337"),
-    Socket\listen("[::]:1337"),
+$sockets = [
+    Socket\listen('127.0.0.1:1337'),
+    Socket\listen('[::1]:1337'),
 ];
 
 $router = new Router;
-$router->addRoute("GET", "/live", $websocket);
-$router->setFallback(new DocumentRoot(__DIR__ . "/public"));
+$router->addRoute('GET', '/live', $websocket);
+$router->setFallback(new DocumentRoot(__DIR__ . '/public'));
 
-$logHandler = new StreamHandler(new ResourceOutputStream(\STDOUT));
+$logHandler = new StreamHandler(getStdout());
 $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
-$sockets = [
-    Socket\listen("127.0.0.1:1337"),
-];
 
 $server = new Server($sockets, $router, $logger);
 
