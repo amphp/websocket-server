@@ -4,6 +4,7 @@ namespace Amp\Http\Server\Websocket\Internal;
 
 use Amp\Struct;
 
+/** @internal */
 class Rfc6455Client
 {
     use Struct;

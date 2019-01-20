@@ -26,6 +26,7 @@ use Amp\Success;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 
+/** @internal */
 class Rfc6455Gateway implements RequestHandler, ServerObserver
 {
     use CallableMaker;

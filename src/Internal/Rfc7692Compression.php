@@ -2,6 +2,7 @@
 
 namespace Amp\Http\Server\Websocket\Internal;
 
+/** @internal */
 class Rfc7692Compression
 {
     const RSV = 0b100;
