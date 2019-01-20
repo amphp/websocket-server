@@ -45,6 +45,9 @@
         "phpunit/phpunit": "^6",
         "infection/infection": "^0.9.3"
     },
+    "suggest": {
+        "ext-zlib": "Required for compression"
+    },
     "autoload": {
         "psr-4": {
             "Amp\\Http\\Server\\Websocket\\": "src"
