@@ -16,7 +16,6 @@ use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket;
-use Amp\Success;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 
@@ -32,8 +31,10 @@ $websocket = new class extends Websocket {
     /** @var int|null */
     private $newestQuestion;
 
-    protected function afterOnStart(Server $server): Promise
+    public function onStart(Server $server): Promise
     {
+        // $promise = parent::onStart($server);
+
         $this->http = new Amp\Artax\DefaultClient;
         $this->watcher = Loop::repeat(10000, function () {
             /** @var Response $response */
@@ -50,14 +51,16 @@ $websocket = new class extends Websocket {
             }
         });
 
-        return new Success;
+        return new \Amp\Success;
+
+        // return $promise;
     }
 
-    protected function beforeOnStop(Server $server): Promise
+    public function onStop(Server $server): Promise
     {
         Loop::cancel($this->watcher);
 
-        return new Success;
+        return parent::onStop($server);
     }
 
     public function onHandshake(Request $request, Response $response)

@@ -33,46 +33,6 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
     const ACCEPT_CONCAT = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
-    /** @var PsrLogger */
-    private $logger;
-
-    /** @var Websocket */
-    private $websocket;
-
-    /** @var ErrorHandler */
-    private $errorHandler;
-
-    /** @var Rfc6455Client[] */
-    private $clients = [];
-
-    /** @var Rfc6455Client[] */
-    private $lowCapacityClients = [];
-
-    /** @var Rfc6455Client[] */
-    private $highFramesPerSecondClients = [];
-
-    /** @var int[] */
-    private $closeTimeouts = [];
-
-    /** @var int[] */
-    private $heartbeatTimeouts = [];
-
-    /** @var int */
-    private $now;
-
-    private $autoFrameSize = (64 << 10) - 9; // frame overhead
-    private $maxBytesPerMinute = 8 << 20;
-    private $maxFrameSize = 2 << 20;
-    private $maxMessageSize = 2 << 20;
-    private $heartbeatPeriod = 10;
-    private $closePeriod = 3;
-    private $validateUtf8 = true;
-    private $textOnly = false;
-    private $queuedPingLimit = 3;
-    private $maxFramesPerSecond = 100; // do not bother with setting it too low, fread(8192) may anyway include up to 2700 frames
-    private $compressionEnabled;
-
-    // Frame control bits
     const FIN = 0b1;
     const RSV_NONE = 0b000;
     const OP_CONT = 0x00;
@@ -81,6 +41,39 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
     const OP_CLOSE = 0x08;
     const OP_PING = 0x09;
     const OP_PONG = 0x0A;
+
+    /** @var PsrLogger */
+    private $logger;
+    /** @var Websocket */
+    private $websocket;
+    /** @var ErrorHandler */
+    private $errorHandler;
+    /** @var Rfc6455Client[] */
+    private $clients = []; // frame overhead
+    /** @var Rfc6455Client[] */
+    private $lowCapacityClients = [];
+    /** @var Rfc6455Client[] */
+    private $highFramesPerSecondClients = [];
+    /** @var int[] */
+    private $closeTimeouts = [];
+    /** @var int[] */
+    private $heartbeatTimeouts = [];
+    /** @var int */
+    private $now;
+
+    private $autoFrameSize = (64 << 10) - 9;
+    private $maxBytesPerMinute = 8 << 20; // do not bother with setting it too low, fread(8192) may anyway include up to 2700 frames
+    private $maxFrameSize = 2 << 20;
+
+    // Frame control bits
+    private $maxMessageSize = 2 << 20;
+    private $heartbeatPeriod = 10;
+    private $closePeriod = 3;
+    private $validateUtf8 = true;
+    private $textOnly = false;
+    private $queuedPingLimit = 3;
+    private $maxFramesPerSecond = 100;
+    private $compressionEnabled;
 
     public function __construct(Websocket $application)
     {
@@ -252,488 +245,6 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         Promise\rethrow(new Coroutine($this->read($client)));
 
         return $client;
-    }
-
-    private function read(Rfc6455Client $client): \Generator
-    {
-        while (($chunk = yield $client->socket->read()) !== null) {
-            if ($client->parser === null) {
-                return;
-            }
-
-            $client->lastReadAt = $this->now;
-            $client->bytesRead += \strlen($chunk);
-            $client->capacity -= \strlen($chunk);
-
-            $frames = $client->parser->send($chunk);
-            $client->framesRead += $frames;
-            $client->framesLastSecond += $frames;
-
-            if ($client->capacity < $this->maxBytesPerMinute / 2) {
-                $this->lowCapacityClients[$client->id] = $client;
-                if ($client->capacity < 0) {
-                    $client->rateDeferred = new Deferred;
-                    yield $client->rateDeferred->promise();
-                }
-            }
-
-            if ($client->framesLastSecond > $this->maxFramesPerSecond / 2) {
-                $this->highFramesPerSecondClients[$client->id] = $client;
-                if ($client->framesLastSecond > $this->maxFramesPerSecond) {
-                    $client->rateDeferred = new Deferred;
-                    yield $client->rateDeferred->promise();
-                }
-            }
-        }
-
-        if (!$client->closedAt) {
-            $client->closedAt = $this->now;
-            $client->closeCode = Code::ABNORMAL_CLOSE;
-            $client->closeReason = 'Client closed underlying TCP connection';
-            yield from $this->tryAppOnClose($client->id, $client->closeCode, $client->closeReason);
-            $client->socket->close();
-        }
-
-        $this->unloadClient($client);
-    }
-
-    private function onAppError(int $clientId, \Throwable $e): \Generator
-    {
-        $this->logger->error((string) $e);
-        $code = Code::UNEXPECTED_SERVER_ERROR;
-        $reason = 'Internal server error, aborting';
-        if (isset($this->clients[$clientId])) { // might have been already unloaded + closed
-            yield from $this->doClose($this->clients[$clientId], $code, $reason);
-        }
-    }
-
-    private function doClose(Rfc6455Client $client, int $code, string $reason): \Generator
-    {
-        // Only proceed if we haven't already begun the close handshake elsewhere
-        if ($client->closedAt) {
-            return 0;
-        }
-
-        $client->closeCode = $code;
-        $client->closeReason = $reason;
-
-        $bytes = 0;
-
-        try {
-            $this->closeTimeouts[$client->id] = $this->now + $this->closePeriod;
-            $promise = $this->sendCloseFrame($client, $code, $reason);
-            yield from $this->tryAppOnClose($client->id, $code, $reason);
-            $bytes = yield $promise;
-        } catch (ClientException $e) {
-            // Ignore client failures.
-        } catch (StreamException $e) {
-            // Ignore stream failures, closing anyway.
-        } finally {
-            $client->socket->close();
-            // Do not unload client here, will be unloaded later.
-        }
-
-        return $bytes;
-    }
-
-    private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise
-    {
-        \assert($code !== Code::NONE || $msg === '');
-        $promise = $this->write($client, $code !== Code::NONE ? \pack('n', $code) . $msg : '', self::OP_CLOSE);
-        $client->closedAt = $this->now;
-        return $promise;
-    }
-
-    private function tryAppOnOpen(int $clientId, Request $request): \Generator
-    {
-        try {
-            yield call([$this->websocket, 'onOpen'], $clientId, $request);
-        } catch (\Throwable $e) {
-            yield from $this->onAppError($clientId, $e);
-        }
-    }
-
-    private function tryAppOnData(Rfc6455Client $client, Message $msg): \Generator
-    {
-        try {
-            yield call([$this->websocket, 'onData'], $client->id, $msg);
-        } catch (\Throwable $e) {
-            yield from $this->onAppError($client->id, $e);
-        }
-    }
-
-    private function tryAppOnClose(int $clientId, int $code, string $reason): \Generator
-    {
-        try {
-            yield call([$this->websocket, 'onClose'], $clientId, $code, $reason);
-        } catch (\Throwable $e) {
-            yield from $this->onAppError($clientId, $e);
-        }
-    }
-
-    private function unloadClient(Rfc6455Client $client)
-    {
-        $client->parser = null;
-
-        $id = $client->id;
-        if ($client->rateDeferred) { // otherwise we may pile up circular references in read()
-            $client->rateDeferred->resolve();
-            unset($client->rateDeferred, $this->highFramesPerSecondClients[$id], $this->lowCapacityClients[$id]);
-        }
-        unset($this->clients[$id], $this->heartbeatTimeouts[$id], $this->closeTimeouts[$id]);
-
-        // fail not yet terminated message streams; they *must not* be failed before client is removed
-        if ($client->msgEmitter) {
-            $emitter = $client->msgEmitter;
-            $client->msgEmitter = null;
-            $emitter->fail(new ClientException);
-        }
-    }
-
-    public function onParsedControlFrame(Rfc6455Client $client, int $opcode, string $data)
-    {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
-        if ($client->closedAt) {
-            return;
-        }
-
-        switch ($opcode) {
-            case self::OP_CLOSE:
-                if ($client->closedAt) {
-                    $this->unloadClient($client);
-                    break;
-                }
-
-                $length = \strlen($data);
-                if ($length === 0) {
-                    $code = Code::NONE;
-                    $reason = '';
-                } elseif ($length < 2) {
-                    $code = Code::PROTOCOL_ERROR;
-                    $reason = 'Close code must be two bytes';
-                } else {
-                    $code = \current(\unpack('n', \substr($data, 0, 2)));
-                    $reason = \substr($data, 2);
-
-                    if ($code < 1000 // Reserved and unused.
-                        || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
-                        || ($code >= 1014 && $code <= 1016) // Should only be sent by server.
-                        || ($code >= 1017 && $code <= 1999) // Reserved for future use
-                        || ($code >= 2000 && $code <= 2999) // Reserved for WebSocket extensions.
-                        || $code >= 5000 // 3000-3999 for libraries, 4000-4999 for applications, >= 5000 invalid.
-                    ) {
-                        $code = Code::PROTOCOL_ERROR;
-                        $reason = 'Invalid close code';
-                    } elseif ($this->validateUtf8 && !\preg_match('//u', $reason)) {
-                        $code = Code::INCONSISTENT_FRAME_DATA_TYPE;
-                        $reason = 'Close reason must be valid UTF-8';
-                    }
-                }
-
-                Promise\rethrow(new Coroutine($this->doClose($client, $code, $reason)));
-                break;
-
-            case self::OP_PING:
-                $this->write($client, $data, self::OP_PONG);
-                break;
-
-            case self::OP_PONG:
-                // We need a min() here, else someone might just send a pong frame with a very high pong count and leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $client->pongCount = \min($client->pingCount, $data);
-                break;
-        }
-    }
-
-    public function onParsedData(Rfc6455Client $client, int $opcode, string $data, bool $terminated)
-    {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
-        if ($client->closedAt) {
-            return;
-        }
-
-        $client->lastDataReadAt = $this->now;
-
-        if (!$client->msgEmitter) {
-            if ($opcode === self::OP_CONT) {
-                $this->onParsedError(
-                    $client,
-                    Code::PROTOCOL_ERROR,
-                    'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
-                );
-                return;
-            }
-
-            $client->msgEmitter = new Emitter;
-            $msg = new Message(new IteratorStream($client->msgEmitter->iterate()), $opcode === self::OP_BIN);
-
-            Promise\rethrow(new Coroutine($this->tryAppOnData($client, $msg)));
-
-            // Something went wrong and the client has been closed and emitter failed.
-            if (!$client->msgEmitter) {
-                return;
-            }
-        } elseif ($opcode !== self::OP_CONT) {
-            $this->onParsedError(
-                $client,
-                Code::PROTOCOL_ERROR,
-                'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION'
-            );
-            return;
-        }
-
-        $client->msgEmitter->emit($data);
-
-        if ($terminated) {
-            $client->msgEmitter->complete();
-            $client->msgEmitter = null;
-            ++$client->messagesRead;
-        }
-    }
-
-    public function onParsedError(Rfc6455Client $client, int $code, string $msg)
-    {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
-        if ($client->closedAt) {
-            return;
-        }
-
-        Promise\rethrow(new Coroutine($this->doClose($client, $code, $msg)));
-    }
-
-    private function compile(string $msg, int $opcode, int $rsv, bool $fin): string
-    {
-        $len = \strlen($msg);
-        $w = \chr(($fin << 7) | ($rsv << 4) | $opcode);
-
-        if ($len > 0xFFFF) {
-            $w .= "\x7F" . \pack('J', $len);
-        } elseif ($len > 0x7D) {
-            $w .= "\x7E" . \pack('n', $len);
-        } else {
-            $w .= \chr($len);
-        }
-
-        return $w . $msg;
-    }
-
-    private function write(Rfc6455Client $client, string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise
-    {
-        if ($client->closedAt) {
-            return new Failure(new ClientException);
-        }
-
-        $frame = $this->compile($msg, $opcode, $rsv, $fin);
-
-        ++$client->framesSent;
-        $client->bytesSent += \strlen($frame);
-        $client->lastSentAt = $this->now;
-
-        return $client->socket->write($frame);
-    }
-
-    public function send(string $data, bool $binary, int $clientId): Promise
-    {
-        if (!isset($this->clients[$clientId])) {
-            return new Success;
-        }
-
-        $client = $this->clients[$clientId];
-        ++$client->messagesSent;
-        $opcode = $binary ? self::OP_BIN : self::OP_TEXT;
-
-        \assert($binary || \preg_match('//u', $data), 'non-binary data needs to be UTF-8 compatible');
-
-        return $client->lastWrite = new Coroutine($this->doSend($client, $data, $opcode));
-    }
-
-    private function doSend(Rfc6455Client $client, string $data, int $opcode): \Generator
-    {
-        if ($client->lastWrite) {
-            yield $client->lastWrite;
-        }
-
-        $rsv = 0;
-
-        if ($client->compressionContext && $opcode === self::OP_TEXT) {
-            $data = $client->compressionContext->compress($data);
-            $rsv |= Rfc7692Compression::RSV;
-        }
-
-        try {
-            $bytes = 0;
-
-            if (\strlen($data) > $this->autoFrameSize) {
-                $len = \strlen($data);
-                $slices = \ceil($len / $this->autoFrameSize);
-                $chunks = \str_split($data, \ceil($len / $slices));
-                $final = \array_pop($chunks);
-                foreach ($chunks as $chunk) {
-                    $bytes += yield $this->write($client, $chunk, $opcode, $rsv, false);
-                    $opcode = self::OP_CONT;
-                    $rsv = 0; // RSV must be 0 in continuation frames.
-                }
-                $bytes += yield $this->write($client, $final, $opcode, $rsv, true);
-            } else {
-                $bytes = yield $this->write($client, $data, $opcode, $rsv);
-            }
-        } catch (\Throwable $exception) {
-            $this->close($client->id);
-            $client->lastWrite = null; // prevent storing a cyclic reference
-            throw $exception;
-        }
-
-        return $bytes;
-    }
-
-    public function broadcast(string $data, bool $binary, array $exceptIds = []): Promise
-    {
-        $promises = [];
-        if (empty($exceptIds)) {
-            foreach ($this->clients as $id => $client) {
-                $promises[] = $this->send($data, $binary, $id);
-            }
-        } else {
-            $exceptIdLookup = \array_flip($exceptIds);
-
-            if ($exceptIdLookup === null) {
-                throw new \Error('Unable to array_flip() the passed IDs');
-            }
-
-            foreach ($this->clients as $id => $client) {
-                if (isset($exceptIdLookup[$id])) {
-                    continue;
-                }
-                $promises[] = $this->send($data, $binary, $id);
-            }
-        }
-        return Promise\all($promises);
-    }
-
-    public function multicast(string $data, bool $binary, array $clientIds): Promise
-    {
-        $promises = [];
-        foreach ($clientIds as $id) {
-            $promises[] = $this->send($data, $binary, $id);
-        }
-        return Promise\all($promises);
-    }
-
-    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '')
-    {
-        if (isset($this->clients[$clientId])) {
-            Promise\rethrow(new Coroutine($this->doClose($this->clients[$clientId], $code, $reason)));
-        }
-    }
-
-    public function getInfo(int $clientId): array
-    {
-        if (!isset($this->clients[$clientId])) {
-            return [];
-        }
-
-        $client = $this->clients[$clientId];
-
-        return [
-            'bytes_read' => $client->bytesRead,
-            'bytes_sent' => $client->bytesSent,
-            'frames_read' => $client->framesRead,
-            'frames_sent' => $client->framesSent,
-            'messages_read' => $client->messagesRead,
-            'messages_sent' => $client->messagesSent,
-            'connected_at' => $client->connectedAt,
-            'closed_at' => $client->closedAt,
-            'close_code' => $client->closeCode,
-            'close_reason' => $client->closeReason,
-            'last_read_at' => $client->lastReadAt,
-            'last_sent_at' => $client->lastSentAt,
-            'last_data_read_at' => $client->lastDataReadAt,
-            'last_data_sent_at' => $client->lastDataSentAt,
-            'compression_enabled' => (bool) $client->compressionContext,
-        ];
-    }
-
-    public function getClients(): array
-    {
-        return \array_keys($this->clients);
-    }
-
-    public function onStart(Server $server): Promise
-    {
-        $this->logger = $server->getLogger();
-        $this->errorHandler = $server->getErrorHandler();
-
-        $server->getTimeReference()->onTimeUpdate($this->callableFromInstanceMethod('timeout'));
-
-        return new Success;
-    }
-
-    public function onStop(Server $server): Promise
-    {
-        $code = Code::GOING_AWAY;
-        $reason = "Server shutting down!";
-
-        $promises = [];
-        foreach ($this->clients as $client) {
-            $promises[] = new Coroutine($this->doClose($client, $code, $reason));
-        }
-
-        return Promise\all($promises);
-    }
-
-    private function sendHeartbeatPing(Rfc6455Client $client)
-    {
-        if ($client->pingCount - $client->pongCount > $this->queuedPingLimit) {
-            $code = Code::POLICY_VIOLATION;
-            $reason = 'Exceeded unanswered PING limit';
-            Promise\rethrow(new Coroutine($this->doClose($client, $code, $reason)));
-        } else {
-            $this->write($client, (string) $client->pingCount++, self::OP_PING);
-        }
-    }
-
-    private function timeout(int $now)
-    {
-        $this->now = $now;
-
-        foreach ($this->closeTimeouts as $clientId => $expiryTime) {
-            if ($expiryTime < $now) {
-                $this->unloadClient($this->clients[$clientId]);
-                unset($this->closeTimeouts[$clientId]);
-            } else {
-                break;
-            }
-        }
-
-        foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
-            if ($expiryTime < $now) {
-                $client = $this->clients[$clientId];
-                unset($this->heartbeatTimeouts[$clientId]);
-                $this->heartbeatTimeouts[$clientId] = $now + $this->heartbeatPeriod;
-                $this->sendHeartbeatPing($client);
-            } else {
-                break;
-            }
-        }
-
-        foreach ($this->lowCapacityClients as $id => $client) {
-            $client->capacity += $this->maxBytesPerMinute / 60;
-            if ($client->capacity > $this->maxBytesPerMinute) {
-                unset($this->lowCapacityClients[$id]);
-            }
-            if (!$client->closedAt && $client->capacity > 0 && $client->rateDeferred && !isset($this->highFramesPerSecondClients[$id])) {
-                $client->rateDeferred->resolve();
-            }
-        }
-
-        foreach ($this->highFramesPerSecondClients as $id => $client) {
-            $client->framesLastSecond -= $this->maxFramesPerSecond;
-            if ($client->framesLastSecond < $this->maxFramesPerSecond / 2) {
-                unset($this->highFramesPerSecondClients[$id]);
-                if ($client->capacity > 0 && !$client->closedAt && $client->rateDeferred) {
-                    $client->rateDeferred->resolve();
-                }
-            }
-        }
     }
 
     /**
@@ -1025,6 +536,488 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
 
             $this->onParsedData($client, $opcode, $payload, $final);
             $frames++;
+        }
+    }
+
+    public function onParsedError(Rfc6455Client $client, int $code, string $msg)
+    {
+        // something went that wrong that we had to close... if parser has anything left, we don't care!
+        if ($client->closedAt) {
+            return;
+        }
+
+        Promise\rethrow(new Coroutine($this->doClose($client, $code, $msg)));
+    }
+
+    private function doClose(Rfc6455Client $client, int $code, string $reason): \Generator
+    {
+        // Only proceed if we haven't already begun the close handshake elsewhere
+        if ($client->closedAt) {
+            return 0;
+        }
+
+        $client->closeCode = $code;
+        $client->closeReason = $reason;
+
+        $bytes = 0;
+
+        try {
+            $this->closeTimeouts[$client->id] = $this->now + $this->closePeriod;
+            $promise = $this->sendCloseFrame($client, $code, $reason);
+            yield from $this->tryAppOnClose($client->id, $code, $reason);
+            $bytes = yield $promise;
+        } catch (ClientException $e) {
+            // Ignore client failures.
+        } catch (StreamException $e) {
+            // Ignore stream failures, closing anyway.
+        } finally {
+            $client->socket->close();
+            // Do not unload client here, will be unloaded later.
+        }
+
+        return $bytes;
+    }
+
+    private function sendCloseFrame(Rfc6455Client $client, int $code, string $msg): Promise
+    {
+        \assert($code !== Code::NONE || $msg === '');
+        $promise = $this->write($client, $code !== Code::NONE ? \pack('n', $code) . $msg : '', self::OP_CLOSE);
+        $client->closedAt = $this->now;
+        return $promise;
+    }
+
+    private function write(Rfc6455Client $client, string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise
+    {
+        if ($client->closedAt) {
+            return new Failure(new ClientException);
+        }
+
+        $frame = $this->compile($msg, $opcode, $rsv, $fin);
+
+        ++$client->framesSent;
+        $client->bytesSent += \strlen($frame);
+        $client->lastSentAt = $this->now;
+
+        return $client->socket->write($frame);
+    }
+
+    private function compile(string $msg, int $opcode, int $rsv, bool $fin): string
+    {
+        $len = \strlen($msg);
+        $w = \chr(($fin << 7) | ($rsv << 4) | $opcode);
+
+        if ($len > 0xFFFF) {
+            $w .= "\x7F" . \pack('J', $len);
+        } elseif ($len > 0x7D) {
+            $w .= "\x7E" . \pack('n', $len);
+        } else {
+            $w .= \chr($len);
+        }
+
+        return $w . $msg;
+    }
+
+    private function tryAppOnClose(int $clientId, int $code, string $reason): \Generator
+    {
+        try {
+            yield call([$this->websocket, 'onClose'], $clientId, $code, $reason);
+        } catch (\Throwable $e) {
+            yield from $this->onAppError($clientId, $e);
+        }
+    }
+
+    private function onAppError(int $clientId, \Throwable $e): \Generator
+    {
+        $this->logger->error((string) $e);
+        $code = Code::UNEXPECTED_SERVER_ERROR;
+        $reason = 'Internal server error, aborting';
+        if (isset($this->clients[$clientId])) { // might have been already unloaded + closed
+            yield from $this->doClose($this->clients[$clientId], $code, $reason);
+        }
+    }
+
+    public function onParsedControlFrame(Rfc6455Client $client, int $opcode, string $data)
+    {
+        // something went that wrong that we had to close... if parser has anything left, we don't care!
+        if ($client->closedAt) {
+            return;
+        }
+
+        switch ($opcode) {
+            case self::OP_CLOSE:
+                if ($client->closedAt) {
+                    $this->unloadClient($client);
+                    break;
+                }
+
+                $length = \strlen($data);
+                if ($length === 0) {
+                    $code = Code::NONE;
+                    $reason = '';
+                } elseif ($length < 2) {
+                    $code = Code::PROTOCOL_ERROR;
+                    $reason = 'Close code must be two bytes';
+                } else {
+                    $code = \current(\unpack('n', \substr($data, 0, 2)));
+                    $reason = \substr($data, 2);
+
+                    if ($code < 1000 // Reserved and unused.
+                        || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
+                        || ($code >= 1014 && $code <= 1016) // Should only be sent by server.
+                        || ($code >= 1017 && $code <= 1999) // Reserved for future use
+                        || ($code >= 2000 && $code <= 2999) // Reserved for WebSocket extensions.
+                        || $code >= 5000 // 3000-3999 for libraries, 4000-4999 for applications, >= 5000 invalid.
+                    ) {
+                        $code = Code::PROTOCOL_ERROR;
+                        $reason = 'Invalid close code';
+                    } elseif ($this->validateUtf8 && !\preg_match('//u', $reason)) {
+                        $code = Code::INCONSISTENT_FRAME_DATA_TYPE;
+                        $reason = 'Close reason must be valid UTF-8';
+                    }
+                }
+
+                Promise\rethrow(new Coroutine($this->doClose($client, $code, $reason)));
+                break;
+
+            case self::OP_PING:
+                $this->write($client, $data, self::OP_PONG);
+                break;
+
+            case self::OP_PONG:
+                // We need a min() here, else someone might just send a pong frame with a very high pong count and leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
+                $client->pongCount = \min($client->pingCount, $data);
+                break;
+        }
+    }
+
+    private function unloadClient(Rfc6455Client $client)
+    {
+        $client->parser = null;
+
+        $id = $client->id;
+        if ($client->rateDeferred) { // otherwise we may pile up circular references in read()
+            $client->rateDeferred->resolve();
+            unset($client->rateDeferred, $this->highFramesPerSecondClients[$id], $this->lowCapacityClients[$id]);
+        }
+        unset($this->clients[$id], $this->heartbeatTimeouts[$id], $this->closeTimeouts[$id]);
+
+        // fail not yet terminated message streams; they *must not* be failed before client is removed
+        if ($client->msgEmitter) {
+            $emitter = $client->msgEmitter;
+            $client->msgEmitter = null;
+            $emitter->fail(new ClientException);
+        }
+    }
+
+    public function onParsedData(Rfc6455Client $client, int $opcode, string $data, bool $terminated)
+    {
+        // something went that wrong that we had to close... if parser has anything left, we don't care!
+        if ($client->closedAt) {
+            return;
+        }
+
+        $client->lastDataReadAt = $this->now;
+
+        if (!$client->msgEmitter) {
+            if ($opcode === self::OP_CONT) {
+                $this->onParsedError(
+                    $client,
+                    Code::PROTOCOL_ERROR,
+                    'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
+                );
+                return;
+            }
+
+            $client->msgEmitter = new Emitter;
+            $msg = new Message(new IteratorStream($client->msgEmitter->iterate()), $opcode === self::OP_BIN);
+
+            Promise\rethrow(new Coroutine($this->tryAppOnData($client, $msg)));
+
+            // Something went wrong and the client has been closed and emitter failed.
+            if (!$client->msgEmitter) {
+                return;
+            }
+        } elseif ($opcode !== self::OP_CONT) {
+            $this->onParsedError(
+                $client,
+                Code::PROTOCOL_ERROR,
+                'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION'
+            );
+            return;
+        }
+
+        $client->msgEmitter->emit($data);
+
+        if ($terminated) {
+            $client->msgEmitter->complete();
+            $client->msgEmitter = null;
+            ++$client->messagesRead;
+        }
+    }
+
+    private function tryAppOnData(Rfc6455Client $client, Message $msg): \Generator
+    {
+        try {
+            yield call([$this->websocket, 'onData'], $client->id, $msg);
+        } catch (\Throwable $e) {
+            yield from $this->onAppError($client->id, $e);
+        }
+    }
+
+    private function tryAppOnOpen(int $clientId, Request $request): \Generator
+    {
+        try {
+            yield call([$this->websocket, 'onOpen'], $clientId, $request);
+        } catch (\Throwable $e) {
+            yield from $this->onAppError($clientId, $e);
+        }
+    }
+
+    private function read(Rfc6455Client $client): \Generator
+    {
+        while (($chunk = yield $client->socket->read()) !== null) {
+            if ($client->parser === null) {
+                return;
+            }
+
+            $client->lastReadAt = $this->now;
+            $client->bytesRead += \strlen($chunk);
+            $client->capacity -= \strlen($chunk);
+
+            $frames = $client->parser->send($chunk);
+            $client->framesRead += $frames;
+            $client->framesLastSecond += $frames;
+
+            if ($client->capacity < $this->maxBytesPerMinute / 2) {
+                $this->lowCapacityClients[$client->id] = $client;
+                if ($client->capacity < 0) {
+                    $client->rateDeferred = new Deferred;
+                    yield $client->rateDeferred->promise();
+                }
+            }
+
+            if ($client->framesLastSecond > $this->maxFramesPerSecond / 2) {
+                $this->highFramesPerSecondClients[$client->id] = $client;
+                if ($client->framesLastSecond > $this->maxFramesPerSecond) {
+                    $client->rateDeferred = new Deferred;
+                    yield $client->rateDeferred->promise();
+                }
+            }
+        }
+
+        if (!$client->closedAt) {
+            $client->closedAt = $this->now;
+            $client->closeCode = Code::ABNORMAL_CLOSE;
+            $client->closeReason = 'Client closed underlying TCP connection';
+            yield from $this->tryAppOnClose($client->id, $client->closeCode, $client->closeReason);
+            $client->socket->close();
+        }
+
+        $this->unloadClient($client);
+    }
+
+    public function broadcast(string $data, bool $binary, array $exceptIds = []): Promise
+    {
+        $promises = [];
+        if (empty($exceptIds)) {
+            foreach ($this->clients as $id => $client) {
+                $promises[] = $this->send($data, $binary, $id);
+            }
+        } else {
+            $exceptIdLookup = \array_flip($exceptIds);
+
+            if ($exceptIdLookup === null) {
+                throw new \Error('Unable to array_flip() the passed IDs');
+            }
+
+            foreach ($this->clients as $id => $client) {
+                if (isset($exceptIdLookup[$id])) {
+                    continue;
+                }
+                $promises[] = $this->send($data, $binary, $id);
+            }
+        }
+        return Promise\all($promises);
+    }
+
+    public function send(string $data, bool $binary, int $clientId): Promise
+    {
+        if (!isset($this->clients[$clientId])) {
+            return new Success;
+        }
+
+        $client = $this->clients[$clientId];
+        ++$client->messagesSent;
+        $opcode = $binary ? self::OP_BIN : self::OP_TEXT;
+
+        \assert($binary || \preg_match('//u', $data), 'non-binary data needs to be UTF-8 compatible');
+
+        return $client->lastWrite = new Coroutine($this->doSend($client, $data, $opcode));
+    }
+
+    private function doSend(Rfc6455Client $client, string $data, int $opcode): \Generator
+    {
+        if ($client->lastWrite) {
+            yield $client->lastWrite;
+        }
+
+        $rsv = 0;
+
+        if ($client->compressionContext && $opcode === self::OP_TEXT) {
+            $data = $client->compressionContext->compress($data);
+            $rsv |= Rfc7692Compression::RSV;
+        }
+
+        try {
+            $bytes = 0;
+
+            if (\strlen($data) > $this->autoFrameSize) {
+                $len = \strlen($data);
+                $slices = \ceil($len / $this->autoFrameSize);
+                $chunks = \str_split($data, \ceil($len / $slices));
+                $final = \array_pop($chunks);
+                foreach ($chunks as $chunk) {
+                    $bytes += yield $this->write($client, $chunk, $opcode, $rsv, false);
+                    $opcode = self::OP_CONT;
+                    $rsv = 0; // RSV must be 0 in continuation frames.
+                }
+                $bytes += yield $this->write($client, $final, $opcode, $rsv, true);
+            } else {
+                $bytes = yield $this->write($client, $data, $opcode, $rsv);
+            }
+        } catch (\Throwable $exception) {
+            $this->close($client->id);
+            $client->lastWrite = null; // prevent storing a cyclic reference
+            throw $exception;
+        }
+
+        return $bytes;
+    }
+
+    public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '')
+    {
+        if (isset($this->clients[$clientId])) {
+            Promise\rethrow(new Coroutine($this->doClose($this->clients[$clientId], $code, $reason)));
+        }
+    }
+
+    public function multicast(string $data, bool $binary, array $clientIds): Promise
+    {
+        $promises = [];
+        foreach ($clientIds as $id) {
+            $promises[] = $this->send($data, $binary, $id);
+        }
+        return Promise\all($promises);
+    }
+
+    public function getInfo(int $clientId): array
+    {
+        if (!isset($this->clients[$clientId])) {
+            return [];
+        }
+
+        $client = $this->clients[$clientId];
+
+        return [
+            'bytes_read' => $client->bytesRead,
+            'bytes_sent' => $client->bytesSent,
+            'frames_read' => $client->framesRead,
+            'frames_sent' => $client->framesSent,
+            'messages_read' => $client->messagesRead,
+            'messages_sent' => $client->messagesSent,
+            'connected_at' => $client->connectedAt,
+            'closed_at' => $client->closedAt,
+            'close_code' => $client->closeCode,
+            'close_reason' => $client->closeReason,
+            'last_read_at' => $client->lastReadAt,
+            'last_sent_at' => $client->lastSentAt,
+            'last_data_read_at' => $client->lastDataReadAt,
+            'last_data_sent_at' => $client->lastDataSentAt,
+            'compression_enabled' => (bool) $client->compressionContext,
+        ];
+    }
+
+    public function getClients(): array
+    {
+        return \array_keys($this->clients);
+    }
+
+    public function onStart(Server $server): Promise
+    {
+        $this->logger = $server->getLogger();
+        $this->errorHandler = $server->getErrorHandler();
+
+        $server->getTimeReference()->onTimeUpdate($this->callableFromInstanceMethod('timeout'));
+
+        return new Success;
+    }
+
+    public function onStop(Server $server): Promise
+    {
+        $code = Code::GOING_AWAY;
+        $reason = "Server shutting down!";
+
+        $promises = [];
+        foreach ($this->clients as $client) {
+            $promises[] = new Coroutine($this->doClose($client, $code, $reason));
+        }
+
+        return Promise\all($promises);
+    }
+
+    private function timeout(int $now)
+    {
+        $this->now = $now;
+
+        foreach ($this->closeTimeouts as $clientId => $expiryTime) {
+            if ($expiryTime < $now) {
+                $this->unloadClient($this->clients[$clientId]);
+                unset($this->closeTimeouts[$clientId]);
+            } else {
+                break;
+            }
+        }
+
+        foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
+            if ($expiryTime < $now) {
+                $client = $this->clients[$clientId];
+                unset($this->heartbeatTimeouts[$clientId]);
+                $this->heartbeatTimeouts[$clientId] = $now + $this->heartbeatPeriod;
+                $this->sendHeartbeatPing($client);
+            } else {
+                break;
+            }
+        }
+
+        foreach ($this->lowCapacityClients as $id => $client) {
+            $client->capacity += $this->maxBytesPerMinute / 60;
+            if ($client->capacity > $this->maxBytesPerMinute) {
+                unset($this->lowCapacityClients[$id]);
+            }
+            if (!$client->closedAt && $client->capacity > 0 && $client->rateDeferred && !isset($this->highFramesPerSecondClients[$id])) {
+                $client->rateDeferred->resolve();
+            }
+        }
+
+        foreach ($this->highFramesPerSecondClients as $id => $client) {
+            $client->framesLastSecond -= $this->maxFramesPerSecond;
+            if ($client->framesLastSecond < $this->maxFramesPerSecond / 2) {
+                unset($this->highFramesPerSecondClients[$id]);
+                if ($client->capacity > 0 && !$client->closedAt && $client->rateDeferred) {
+                    $client->rateDeferred->resolve();
+                }
+            }
+        }
+    }
+
+    private function sendHeartbeatPing(Rfc6455Client $client)
+    {
+        if ($client->pingCount - $client->pongCount > $this->queuedPingLimit) {
+            $code = Code::POLICY_VIOLATION;
+            $reason = 'Exceeded unanswered PING limit';
+            Promise\rethrow(new Coroutine($this->doClose($client, $code, $reason)));
+        } else {
+            $this->write($client, (string) $client->pingCount++, self::OP_PING);
         }
     }
 }

@@ -8,13 +8,13 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Promise;
-use Amp\Success;
-use function Amp\call;
 
 abstract class Websocket implements RequestHandler, ServerObserver
 {
     /** @var Internal\Rfc6455Gateway */
     private $gateway;
+    /** @var bool */
+    private $onStartCalled = false;
 
     /**
      * Creates a responder that accepts websocket connections.
@@ -191,6 +191,14 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /** {@inheritdoc} */
     final public function handleRequest(Request $request): Promise
     {
+        if (!$this->onStartCalled) {
+            throw new \Error(\sprintf(
+                'Can\'t handle WebSocket handshake, because %s::onStart() overrides %s::onStart() and didn\'t call its parent method.',
+                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
+                self::class
+            ));
+        }
+
         return $this->gateway->handleRequest($request);
     }
 
@@ -293,43 +301,39 @@ abstract class Websocket implements RequestHandler, ServerObserver
         $this->gateway->setOption('textOnly', $textOnly);
     }
 
-    protected function beforeOnStart(Server $server): Promise
+    /**
+     * Invoked when the server is starting.
+     *
+     * Server sockets have been opened, but are not yet accepting client connections. This method should be used to set
+     * up any necessary state for responding to requests, including starting loop watchers such as timers.
+     *
+     * Note: Implementations overriding this method must always call the parent method.
+     *
+     * @param Server $server
+     *
+     * @return Promise
+     */
+    public function onStart(Server $server): Promise
     {
-        return new Success; // to be defined by child class
+        $this->onStartCalled = true;
+
+        return $this->gateway->onStart($server);
     }
 
-    protected function afterOnStart(Server $server): Promise
+    /**
+     * Invoked when the server has initiated stopping.
+     *
+     * No further requests are accepted and any connected clients should be closed gracefully and any loop watchers
+     * cancelled.
+     *
+     * Note: Implementations overriding this method must always call the parent method.
+     *
+     * @param Server $server
+     *
+     * @return Promise
+     */
+    public function onStop(Server $server): Promise
     {
-        return new Success; // to be defined by child class
-    }
-
-    /** {@inheritdoc} */
-    final public function onStart(Server $server): Promise
-    {
-        return call(function () use ($server) {
-            yield $this->beforeOnStart($server);
-            yield $this->gateway->onStart($server);
-            yield $this->afterOnStart($server);
-        });
-    }
-
-    protected function beforeOnStop(Server $server): Promise
-    {
-        return new Success; // to be defined by child class
-    }
-
-    protected function afterOnStop(Server $server): Promise
-    {
-        return new Success; // to be defined by child class
-    }
-
-    /** {@inheritdoc} */
-    final public function onStop(Server $server): Promise
-    {
-        return call(function () use ($server) {
-            yield $this->beforeOnStop($server);
-            yield $this->gateway->onStop($server);
-            yield $this->afterOnStop($server);
-        });
+        return $this->gateway->onStop($server);
     }
 }
