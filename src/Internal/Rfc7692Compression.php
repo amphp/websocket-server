@@ -1,4 +1,4 @@
-<?php
+<?php /** @noinspection PhpComposerExtensionStubsInspection */
 
 namespace Amp\Http\Server\Websocket\Internal;
 
@@ -9,23 +9,14 @@ class Rfc7692Compression
     const DEFAULT_WINDOW_SIZE = 15;
     const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
-    /** @var resource */
-    private $deflate;
-
-    /** @var resource */
-    private $inflate;
-
-    private $serverContextTakeover;
-    private $clientContextTakeover;
-
     /**
      * @param string $headerIn Header from request.
      * @param string $headerOut Sec-Websocket-Extension response header.
      *
      * @return \Amp\Http\Server\Websocket\Internal\Rfc7692Compression|null
      */
-    public static function fromHeader(string $headerIn, string &$headerOut = null)
-    { /* : ?self */
+    public static function fromHeader(string $headerIn, string &$headerOut = null) /* : ?self */
+    {
         $headerIn = \explode(';', \strtolower($headerIn));
         $headerIn = \array_map('trim', $headerIn);
 
@@ -100,6 +91,15 @@ class Rfc7692Compression
         return new self($clientWindowSize, $serverWindowSize, $clientContextTakeover, $serverContextTakeover);
     }
 
+    /** @var resource */
+    private $deflate;
+    /** @var resource */
+    private $inflate;
+    /** @var bool */
+    private $serverContextTakeover;
+    /** @var bool */
+    private $clientContextTakeover;
+
     private function __construct(
         int $clientWindowSize,
         int $serverWindowSize,
@@ -118,8 +118,8 @@ class Rfc7692Compression
         }
     }
 
-    public function decompress(string $data)
-    { /* : ?string */
+    public function decompress(string $data) /* : ?string */
+    {
         $data = \inflate_add(
             $this->inflate,
             $data . self::EMPTY_BLOCK,

@@ -18,10 +18,22 @@ final class Message extends Payload
     }
 
     /**
-     * @return bool Returns a promise that resolves to true if the message is binary, false if it is UTF-8 text.
+     * @return bool Signals whether the message is binary, false if it is UTF-8 text.
+     *
+     * @see isText
      */
     public function isBinary(): bool
     {
         return $this->binary;
+    }
+
+    /**
+     * @return bool Signals whether the message is text, false if it is binary.
+     *
+     * @see isBinary
+     */
+    public function isText(): bool
+    {
+        return !$this->binary;
     }
 }
