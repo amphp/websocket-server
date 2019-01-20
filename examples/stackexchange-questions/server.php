@@ -33,7 +33,7 @@ $websocket = new class extends Websocket {
 
     public function onStart(Server $server): Promise
     {
-        // $promise = parent::onStart($server);
+        $promise = parent::onStart($server);
 
         $this->http = new Amp\Artax\DefaultClient;
         $this->watcher = Loop::repeat(10000, function () {
@@ -51,9 +51,7 @@ $websocket = new class extends Websocket {
             }
         });
 
-        return new \Amp\Success;
-
-        // return $promise;
+        return $promise;
     }
 
     public function onStop(Server $server): Promise
