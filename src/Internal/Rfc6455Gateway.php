@@ -240,8 +240,9 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         $this->clients[$client->id] = $client;
         $this->heartbeatTimeouts[$client->id] = $this->now + $this->heartbeatPeriod;
 
-        Promise\rethrow(new Coroutine($this->tryAppOnOpen($client->id, $request)));
+        \stream_context_set_option($socket->getResource(), 'socket', 'tcp_nodelay', true);
 
+        Promise\rethrow(new Coroutine($this->tryAppOnOpen($client->id, $request)));
         Promise\rethrow(new Coroutine($this->read($client)));
 
         return $client;
