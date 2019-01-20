@@ -240,7 +240,12 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         $this->clients[$client->id] = $client;
         $this->heartbeatTimeouts[$client->id] = $this->now + $this->heartbeatPeriod;
 
-        \stream_context_set_option($socket->getResource(), 'socket', 'tcp_nodelay', true);
+        // Setting via stream API doesn't seem to work...
+        if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
+            $sock = \socket_import_stream($socket->getResource());
+            /** @noinspection PhpComposerExtensionStubsInspection */
+            \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
+        }
 
         Promise\rethrow(new Coroutine($this->tryAppOnOpen($client->id, $request)));
         Promise\rethrow(new Coroutine($this->read($client)));

@@ -26,9 +26,9 @@ Amp\Loop::run(function () {
         public function onData(int $clientId, Websocket\Message $message)
         {
             if ($message->isBinary()) {
-                $this->broadcastBinary(yield $message->buffer());
+                yield $this->broadcastBinary(yield $message->buffer());
             } else {
-                $this->broadcast(yield $message->buffer());
+                yield $this->broadcast(yield $message->buffer());
             }
         }
 
