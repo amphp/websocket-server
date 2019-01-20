@@ -244,7 +244,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
             $sock = \socket_import_stream($socket->getResource());
             /** @noinspection PhpComposerExtensionStubsInspection */
-            \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
+            @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
         Promise\rethrow(new Coroutine($this->tryAppOnOpen($client->id, $request)));
