@@ -19,8 +19,7 @@ use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
-$websocket = new class extends Websocket
-{
+$websocket = new class extends Websocket {
     public function onHandshake(Request $request, Response $response)
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
