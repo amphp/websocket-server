@@ -3,14 +3,16 @@
 // Note that this example requires amphp/artax, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
-use Amp\Artax\Client;
+use Amp\Artax\Client as HttpClient;
+use Amp\Artax\DefaultClient;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\StaticContent\DocumentRoot;
-use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
+use Amp\Http\Websocket\Client;
+use Amp\Http\Websocket\Message;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
@@ -25,7 +27,7 @@ $websocket = new class extends Websocket {
     /** @var string|null */
     private $watcher;
 
-    /** @var Client */
+    /** @var HttpClient */
     private $http;
 
     /** @var int|null */
@@ -35,13 +37,17 @@ $websocket = new class extends Websocket {
     {
         $promise = parent::onStart($server);
 
-        $this->http = new Amp\Artax\DefaultClient;
+        $this->http = new DefaultClient;
         $this->watcher = Loop::repeat(10000, function () {
             /** @var Response $response */
             $response = yield $this->http->request('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow');
             $json = yield $response->getBody();
 
             $data = \json_decode($json, true);
+
+            if (!isset($data['items'])) {
+                return;
+            }
 
             foreach (\array_reverse($data['items']) as $question) {
                 if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
@@ -61,7 +67,7 @@ $websocket = new class extends Websocket {
         return parent::onStop($server);
     }
 
-    public function onHandshake(Request $request, Response $response)
+    public function onHandshake(Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
@@ -70,17 +76,17 @@ $websocket = new class extends Websocket {
         return $response;
     }
 
-    public function onOpen(int $clientId, Request $request)
+    public function onOpen(Client $client, Request $request): void
     {
         // do nothing
     }
 
-    public function onData(int $clientId, Message $message)
+    public function onData(Client $client, Message $message): void
     {
         // do nothing
     }
 
-    public function onClose(int $clientId, int $code, string $reason)
+    public function onClose(Client $client, int $code, string $reason): void
     {
         // do nothing
     }

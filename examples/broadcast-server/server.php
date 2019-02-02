@@ -8,8 +8,9 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\StaticContent\DocumentRoot;
-use Amp\Http\Server\Websocket\Message;
 use Amp\Http\Server\Websocket\Websocket;
+use Amp\Http\Websocket\Client;
+use Amp\Http\Websocket\Message;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
@@ -20,7 +21,7 @@ use function Amp\ByteStream\getStdout;
 require __DIR__ . '/../../vendor/autoload.php';
 
 $websocket = new class extends Websocket {
-    public function onHandshake(Request $request, Response $response)
+    public function onHandshake(Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
@@ -29,17 +30,19 @@ $websocket = new class extends Websocket {
         return $response;
     }
 
-    public function onOpen(int $clientId, Request $request)
+    public function onOpen(Client $client, Request $request): void
     {
         // do nothing
     }
 
-    public function onData(int $clientId, Message $message)
+    public function onData(Client $client, Message $message): \Generator
     {
-        yield $this->broadcast(yield $message->buffer());
+        yield $this->broadcast(
+            \sprintf('%d: %s', $client->getId(), yield $message->buffer())
+        );
     }
 
-    public function onClose(int $clientId, int $code, string $reason)
+    public function onClose(Client $client, int $code, string $reason): void
     {
         // do nothing
     }

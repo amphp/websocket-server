@@ -2,41 +2,68 @@
 
 namespace Amp\Http\Server\Websocket;
 
+use Amp\Coroutine;
+use Amp\Deferred;
+use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
+use Amp\Http\Status;
+use Amp\Http\Websocket\Application;
+use Amp\Http\Websocket\Client;
+use Amp\Http\Websocket\Code;
+use Amp\Http\Websocket\Message;
+use Amp\Http\Websocket\Rfc6455Client;
+use Amp\Http\Websocket\Rfc7692Compression;
 use Amp\Promise;
+use Amp\Socket\Socket;
+use Amp\Success;
+use Psr\Log\LoggerInterface as PsrLogger;
+use function Amp\call;
+use function Amp\Http\Websocket\generateAcceptFromKey;
 
-abstract class Websocket implements RequestHandler, ServerObserver
+abstract class Websocket implements Application, RequestHandler, ServerObserver
 {
-    /** @var Internal\Rfc6455Gateway */
-    private $gateway;
-    /** @var bool */
-    private $onStartCalled = false;
+    /** @var PsrLogger */
+    private $logger;
 
-    /**
-     * Creates a responder that accepts websocket connections.
-     */
-    public function __construct()
-    {
-        $this->gateway = new Internal\Rfc6455Gateway($this);
-    }
+    /** @var Options */
+    private $options;
+
+    /** @var ErrorHandler */
+    private $errorHandler;
+
+    /** @var Rfc6455Client[] */
+    private $clients = [];
+
+    /** @var int[] */
+    private $framesReadInLastSecond = [];
+
+    /** @var int[] */
+    private $bytesReadInLastSecond = [];
+
+    /** @var Deferred[] */
+    private $rateDeferreds = [];
+
+    /** @var int[] */
+    private $heartbeatTimeouts = [];
+
+    /** @var int */
+    private $now;
 
     /**
      * Respond to websocket handshake requests.
-     *
      * If a websocket application doesn't wish to impose any special constraints on the
      * handshake it doesn't have to do anything in this method and all handshakes will
      * be automatically accepted.
-     *
      * Return an instance of \Amp\Http\Server\Response to reject the websocket connection request.
      *
-     * @param Request  $request The HTTP request that instigated the handshake
+     * @param Request  $request  The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
-     * @return Response|\Amp\Promise|\Generator Return the given response to accept the
+     * @return Response|Promise|\Generator Return the given response to accept the
      *     connection or a new response object to deny the connection. May also return a
      *     promise or generator to run as a coroutine.
      */
@@ -45,268 +72,323 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Invoked when the full two-way websocket upgrade completes.
      *
-     * @param int     $clientId A unique (to the current process) identifier for this client
+     * @param Client  $client  The client opening the connection.
      * @param Request $request The HTTP request the instigated the connection.
+     *
+     * @return Promise|\Generator|null If a promise is returned from this method (or generator run
+     *     as a coroutine), messages will not be read from the client until the promise resolves.
      */
-    abstract public function onOpen(int $clientId, Request $request);
+    abstract public function onOpen(Client $client, Request $request);
 
     /**
      * Invoked when data messages arrive from the client.
      *
-     * @param int     $clientId A unique (to the current process) identifier for this client
+     * @param Client  $client  The client sending the message.
      * @param Message $message A stream of data received from the client
+     *
+     * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
      */
-    abstract public function onData(int $clientId, Message $message);
+    abstract public function onData(Client $client, Message $message);
 
     /**
      * Invoked when the close handshake completes.
      *
-     * @param int    $clientId A unique (to the current process) identifier for this client
-     * @param int    $code The websocket code describing the close
+     * @param Client $client The client which closed the connection.
+     * @param int    $code   The websocket code describing the close
      * @param string $reason The reason for the close (may be empty)
+     *
+     * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
      */
-    abstract public function onClose(int $clientId, int $code, string $reason);
+    abstract public function onClose(Client $client, int $code, string $reason);
 
     /**
-     * Send a UTF-8 text message to the given client.
-     *
-     * @param string $data Data to send.
-     * @param int    $clientId
-     *
-     * @return \Amp\Promise<int>
+     * @param Options|null $options
      */
-    final public function send(string $data, int $clientId): Promise
+    public function __construct(?Options $options = null)
     {
-        return $this->gateway->send($data, false, $clientId);
+        $this->options = $options ?? new Options;
     }
 
-    /**
-     * Send a binary message to the given client.
-     *
-     * @param string $data Data to send.
-     * @param int    $clientId
-     *
-     * @return \Amp\Promise<int>
-     */
-    final public function sendBinary(string $data, int $clientId): Promise
+    final public function handleRequest(Request $request): Promise
     {
-        return $this->gateway->send($data, true, $clientId);
+        if ($this->options === null) {
+            throw new \Error(\sprintf(
+                "Can't handle WebSocket handshake, because %s::__construct() overrides %s::__construct() and didn't call its parent method.",
+                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
+                self::class
+            ));
+        }
+
+        if ($this->logger === null) {
+            throw new \Error(\sprintf(
+                "Can't handle WebSocket handshake, because %s::onStart() overrides %s::onStart() and didn't call its parent method.",
+                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
+                self::class
+            ));
+        }
+
+        return new Coroutine($this->respond($request));
+    }
+
+    private function respond(Request $request): \Generator
+    {
+        /** @var \Amp\Http\Server\Response $response */
+        if ($request->getMethod() !== 'GET') {
+            $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
+            $response->setHeader('Allow', 'GET');
+            return $response;
+        }
+
+        if ($request->getProtocolVersion() !== '1.1') {
+            $response = yield $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
+            $response->setHeader('Upgrade', 'websocket');
+            return $response;
+        }
+
+        if (null !== yield $request->getBody()->read()) {
+            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
+        }
+
+        $hasUpgradeWebsocket = false;
+        foreach ($request->getHeaderArray('Upgrade') as $value) {
+            if (\strcasecmp($value, 'websocket') === 0) {
+                $hasUpgradeWebsocket = true;
+                break;
+            }
+        }
+        if (!$hasUpgradeWebsocket) {
+            return yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
+        }
+
+        $hasConnectionUpgrade = false;
+        foreach ($request->getHeaderArray('Connection') as $value) {
+            $values = \array_map('trim', \explode(',', $value));
+
+            foreach ($values as $token) {
+                if (\strcasecmp($token, 'Upgrade') === 0) {
+                    $hasConnectionUpgrade = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$hasConnectionUpgrade) {
+            $reason = 'Bad Request: "Connection: Upgrade" header required';
+            $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
+            $response->setHeader('Upgrade', 'websocket');
+            return $response;
+        }
+
+        if (!$acceptKey = $request->getHeader('Sec-Websocket-Key')) {
+            $reason = 'Bad Request: "Sec-Websocket-Key" header required';
+            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
+        }
+
+        if (!\in_array('13', $request->getHeaderArray('Sec-Websocket-Version'), true)) {
+            $reason = 'Bad Request: Requested Websocket version unavailable';
+            $response = yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
+            $response->setHeader('Sec-Websocket-Version', '13');
+            return $response;
+        }
+
+        $response = new Response(Status::SWITCHING_PROTOCOLS, [
+            'Connection'           => 'upgrade',
+            'Upgrade'              => 'websocket',
+            'Sec-WebSocket-Accept' => generateAcceptFromKey($acceptKey),
+        ]);
+
+        $compressionContext = null;
+        if ($this->options->isCompressionEnabled()) {
+            $extensions = (string) $request->getHeader('Sec-Websocket-Extensions');
+
+            $extensions = \array_map('trim', \explode(',', $extensions));
+
+            foreach ($extensions as $extension) {
+                if ($compressionContext = Rfc7692Compression::fromClientHeader($extension, $headerLine)) {
+                    $response->setHeader('Sec-Websocket-Extensions', $headerLine);
+                    break;
+                }
+            }
+        }
+
+        $response = yield call([$this, 'onHandshake'], $request, $response);
+
+        if (!$response instanceof Response) {
+            throw new \Error(\sprintf(
+                '%s::onHandshake() must return or resolve to an instance of %s, %s returned',
+                self::class,
+                Response::class,
+                \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
+            ));
+        }
+
+        if ($response->getStatus() === Status::SWITCHING_PROTOCOLS) {
+            $response->upgrade(function (Socket $socket) use ($request, $compressionContext) {
+                $this->reapClient($socket, $request, $compressionContext);
+            });
+        }
+
+        return $response;
+    }
+
+    private function reapClient(Socket $socket, Request $request, ?Rfc7692Compression $compressionContext): void
+    {
+        $client = new Rfc6455Client($socket, $this->logger, $this->options, false, $compressionContext);
+
+        $id = $client->getId();
+
+        $this->clients[$id] = $client;
+        $this->heartbeatTimeouts[$id] = $this->now + $this->options->getHeartbeatPeriod();
+
+        // Setting via stream API doesn't seem to work...
+        if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
+            $sock = \socket_import_stream($socket->getResource());
+            /** @noinspection PhpComposerExtensionStubsInspection */
+            @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
+        }
+
+        \assert($this->logger->debug(\sprintf('Upgraded %s to websocket connection', $client->getRemoteAddress())) || true);
+
+        $parser = $client->setup($this);
+        Promise\rethrow(new Coroutine($this->runClient($request, $client, $socket, $parser)));
+    }
+
+    private function runClient(Request $request, Client $client, Socket $socket, callable $parser): \Generator
+    {
+        $id = $client->getId();
+        $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
+        $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
+
+        try {
+            yield call([$this, 'onOpen'], $client, $request);
+
+            while (($chunk = yield $socket->read()) !== null) {
+                $frames = $parser($chunk);
+
+                $this->framesReadInLastSecond[$id] = ($this->framesReadInLastSecond[$id] ?? 0) + $frames;
+                $this->bytesReadInLastSecond[$id] = ($this->bytesReadInLastSecond[$id] ?? 0) + \strlen($chunk);
+
+                $chunk = null; // Free memory from last chunk read.
+
+                if ($this->framesReadInLastSecond[$id] >= $maxFramesPerSecond) {
+                    $this->rateDeferreds[$id] = $deferred = new Deferred;
+                    yield $deferred->promise();
+                } else if ($this->bytesReadInLastSecond[$id] >= $maxBytesPerSecond) {
+                    $this->rateDeferreds[$id] = $deferred = new Deferred;
+                    yield $deferred->promise();
+                }
+            }
+
+            yield $client->close(Code::ABNORMAL_CLOSE, 'Client closed underlying TCP connection');
+        } catch (\Throwable $exception) {
+            $this->logger->error((string) $exception);
+            yield $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+        } finally {
+            unset($this->clients[$id], $this->rateDeferreds[$id], $this->heartbeatTimeouts[$id]);
+        }
     }
 
     /**
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
      *
-     * @param string $data Data to send.
+     * @param string $data      Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
     final public function broadcast(string $data, array $exceptIds = []): Promise
     {
-        return $this->gateway->broadcast($data, false, $exceptIds);
+        return $this->broadcastTo($data, false, $exceptIds);
     }
 
     /**
      * Send a binary message to all clients (except those given in the optional array).
      *
-     * @param string $data Data to send.
+     * @param string $data      Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
     final public function broadcastBinary(string $data, array $exceptIds = []): Promise
     {
-        return $this->gateway->broadcast($data, true, $exceptIds);
+        return $this->broadcastTo($data, true, $exceptIds);
+    }
+
+    private function broadcastTo(string $data, bool $binary, array $exceptIds = []): Promise
+    {
+        $promises = [];
+        if (empty($exceptIds)) {
+            foreach ($this->clients as $id => $client) {
+                $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
+            }
+        } else {
+            $exceptIdLookup = \array_flip($exceptIds);
+
+            if ($exceptIdLookup === null) {
+                throw new \Error('Unable to array_flip() the passed IDs');
+            }
+
+            foreach ($this->clients as $id => $client) {
+                if (isset($exceptIdLookup[$id])) {
+                    continue;
+                }
+                $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
+            }
+        }
+        return Promise\all($promises);
     }
 
     /**
      * Send a UTF-8 text message to a set of clients.
      *
-     * @param string     $data Data to send.
+     * @param string     $data      Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
     final public function multicast(string $data, array $clientIds): Promise
     {
-        return $this->gateway->multicast($data, false, $clientIds);
+        return $this->multicastTo($data, false, $clientIds);
     }
 
     /**
      * Send a binary message to a set of clients.
      *
-     * @param string     $data Data to send.
+     * @param string     $data      Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
     final public function multicastBinary(string $data, array $clientIds): Promise
     {
-        return $this->gateway->multicast($data, true, $clientIds);
+        return $this->multicastTo($data, true, $clientIds);
     }
 
-    /**
-     * Close the client connection with a code and UTF-8 string reason.
-     *
-     * @param int    $clientId
-     * @param int    $code
-     * @param string $reason
-     */
-    final public function close(int $clientId, int $code = Code::NORMAL_CLOSE, string $reason = '')
+    private function multicastTo(string $data, bool $binary, array $clientIds): Promise
     {
-        $this->gateway->close($clientId, $code, $reason);
+        $promises = [];
+        foreach ($clientIds as $id) {
+            if (!isset($this->clients[$id])) {
+                continue;
+            }
+            $client = $this->clients[$id];
+            $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
+        }
+        return Promise\all($promises);
     }
 
     /**
-     * @param int $clientId
-     *
-     * @return array [
-     *     'bytes_read'        => int,
-     *     'bytes_sent'        => int,
-     *     'frames_read'       => int,
-     *     'frames_sent'       => int,
-     *     'messages_read'     => int,
-     *     'messages_sent'     => int,
-     *     'connected_at'      => int,
-     *     'closed_at'         => int,
-     *     'last_read_at'      => int,
-     *     'last_send_at'      => int,
-     *     'last_data_read_at' => int,
-     *     'last_data_sent_at' => int,
-     * ]
-     */
-    final public function getInfo(int $clientId): array
-    {
-        return $this->gateway->getInfo($clientId);
-    }
-
-    /**
-     * @return int[] Array of client IDs.
+     * @return Client[] Array of Client objects currently connected to this endpoint indexed by their IDs.
      */
     final public function getClients(): array
     {
-        return $this->gateway->getClients();
-    }
-
-    /** {@inheritdoc} */
-    final public function handleRequest(Request $request): Promise
-    {
-        if (!$this->onStartCalled) {
-            throw new \Error(\sprintf(
-                'Can\'t handle WebSocket handshake, because %s::onStart() overrides %s::onStart() and didn\'t call its parent method.',
-                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
-                self::class
-            ));
-        }
-
-        return $this->gateway->handleRequest($request);
-    }
-
-    /**
-     * @param int $size The maximum size a single message may be in bytes. Default is 2097152 (2MB).
-     *
-     * @throws \Error If the size is less than 1.
-     */
-    final public function setMessageSizeLimit(int $size)
-    {
-        $this->gateway->setOption('maxMessageSize', $size);
-    }
-
-    /**
-     * @param int $bytes Maximum number of bytes per minute the endpoint can receive from the client.
-     *     Default is 8388608 (8MB).
-     *
-     * @throws \Error If the number of bytes is less than 1.
-     */
-    final public function setBytesPerMinuteLimit(int $bytes)
-    {
-        $this->gateway->setOption('maxBytesPerMinute', $bytes);
-    }
-
-    /**
-     * @param int $size The maximum size a single frame may be in bytes. Default is 2097152 (2MB).
-     *
-     * @throws \Error If the size is less than 1.
-     */
-    final public function setFrameSizeLimit(int $size)
-    {
-        $this->gateway->setOption('maxFrameSize', $size);
-    }
-
-    /**
-     * @param int $count The maximum number of frames that can be received per second. Default is 100.
-     *
-     * @throws \Error If the count is less than 1.
-     */
-    final public function setFramesPerSecondLimit(int $count)
-    {
-        $this->gateway->setOption('maxFramesPerSecond', $count);
-    }
-
-    /**
-     * @param int $bytes The number of bytes in outgoing message that will cause the endpoint to break the message into
-     *     multiple frames. Default is 65527 (64k - 9 for frame overhead).
-     *
-     * @throws \Error
-     */
-    final public function setFrameSplitThreshold(int $bytes)
-    {
-        $this->gateway->setOption('autoFrameSize', $bytes);
-    }
-
-    /**
-     * @param int $period The number of seconds a connection may be idle before a ping is sent to client. Default is 10.
-     *
-     * @throws \Error If the period is less than 1.
-     */
-    final public function setHeartbeatPeriod(int $period)
-    {
-        $this->gateway->setOption('heartbeatPeriod', $period);
-    }
-
-    /**
-     * @param int $period The number of seconds to wait after sending a close frame to wait for the client to send
-     *     the acknowledging close frame before being disconnected. Default is 3.
-     *
-     * @throws \Error If the period is less than 1.
-     */
-    final public function setClosePeriod(int $period)
-    {
-        $this->gateway->setOption('closePeriod', $period);
-    }
-
-    /**
-     * @param int $limit The number of unanswered pings allowed before a client is disconnected. Default is 3.
-     *
-     * @throws \Error If the limit is less than 1.
-     */
-    final public function setQueuedPingLimit(int $limit)
-    {
-        $this->gateway->setOption('queuedPingLimit', $limit);
-    }
-
-    /**
-     * @param bool $validate True to validate text frame data as UTF-8, false to skip validation. Default is true.
-     */
-    final public function setValidateUtf8(bool $validate)
-    {
-        $this->gateway->setOption('validateUtf8', $validate);
-    }
-
-    /**
-     * @param bool $textOnly True to allow only text frames (no binary).
-     */
-    final public function setTextOnly(bool $textOnly)
-    {
-        $this->gateway->setOption('textOnly', $textOnly);
+        return $this->clients;
     }
 
     /**
      * Invoked when the server is starting.
-     *
      * Server sockets have been opened, but are not yet accepting client connections. This method should be used to set
      * up any necessary state for responding to requests, including starting loop watchers such as timers.
-     *
      * Note: Implementations overriding this method must always call the parent method.
      *
      * @param Server $server
@@ -315,17 +397,23 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     public function onStart(Server $server): Promise
     {
-        $this->onStartCalled = true;
+        $this->logger = $server->getLogger();
+        $this->errorHandler = $server->getErrorHandler();
 
-        return $this->gateway->onStart($server);
+        if ($this->options->isCompressionEnabled() && !\extension_loaded('zlib')) {
+            $this->options = $this->options->withoutCompression();
+            $this->logger->notice('Compression is enabled in the options, but ext-zlib is required for compression');
+        }
+
+        $server->getTimeReference()->onTimeUpdate(\Closure::fromCallable([$this, 'timeout']));
+
+        return new Success;
     }
 
     /**
      * Invoked when the server has initiated stopping.
-     *
      * No further requests are accepted and any connected clients should be closed gracefully and any loop watchers
      * cancelled.
-     *
      * Note: Implementations overriding this method must always call the parent method.
      *
      * @param Server $server
@@ -334,6 +422,51 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     public function onStop(Server $server): Promise
     {
-        return $this->gateway->onStop($server);
+        $code = Code::GOING_AWAY;
+        $reason = 'Server shutting down!';
+
+        $promises = [];
+        foreach ($this->clients as $client) {
+            $promises[] = $client->close($code, $reason);
+        }
+
+        return Promise\all($promises);
+    }
+
+    /**
+     * @param int $now Current timestamp.
+     */
+    private function timeout(int $now): void
+    {
+        $this->now = $now;
+
+        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
+        $queuedPingLimit = $this->options->getQueuedPingLimit();
+
+        foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
+            if ($expiryTime < $this->now) {
+                $client = $this->clients[$clientId];
+                unset($this->heartbeatTimeouts[$clientId]);
+                $this->heartbeatTimeouts[$clientId] = $this->now + $heartbeatPeriod;
+
+                if ($client->getUnansweredPingCount() > $queuedPingLimit) {
+                    $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+                } else {
+                    $client->ping();
+                }
+            } else {
+                break;
+            }
+        }
+
+        $this->framesReadInLastSecond = [];
+        $this->bytesReadInLastSecond = [];
+
+        $rateDeferreds = $this->rateDeferreds;
+        $this->rateDeferreds = [];
+
+        foreach ($rateDeferreds as $deferred) {
+            $deferred->resolve();
+        }
     }
 }
