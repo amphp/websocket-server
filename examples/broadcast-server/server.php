@@ -13,7 +13,6 @@ use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Socket;
 use Amp\Websocket\Client;
-use Amp\Websocket\ClosedException;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
@@ -31,21 +30,12 @@ $websocket = new class extends Websocket {
         return $response;
     }
 
-    public function onOpen(Client $client, Request $request): void
+    public function onConnection(Client $client, Request $request): \Generator
     {
-        // do nothing
-    }
-
-    public function onData(Client $client, Message $message): \Generator
-    {
-        yield $this->broadcast(
-            \sprintf('%d: %s', $client->getId(), yield $message->buffer())
-        );
-    }
-
-    public function onClose(Client $client, ?ClosedException $exception): void
-    {
-        // do nothing
+        while ($message = yield $client->receive()) {
+            \assert($message instanceof Message);
+            $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+        }
     }
 };
 

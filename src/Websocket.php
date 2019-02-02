@@ -17,7 +17,6 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
-use Amp\Websocket\Message;
 use Amp\Websocket\Rfc6455Client;
 use Amp\Websocket\Rfc7692Compression;
 use Psr\Log\LoggerInterface as PsrLogger;
@@ -70,36 +69,20 @@ abstract class Websocket implements RequestHandler, ServerObserver
     abstract public function onHandshake(Request $request, Response $response);
 
     /**
-     * Invoked when the full two-way websocket upgrade completes.
+     * This method should handle messages received on the websocket connection.
      *
-     * @param Client  $client  The client opening the connection.
-     * @param Request $request The HTTP request the instigated the connection.
+     * ```
+     * while ($message = yield $client->receive()) {
+     *     $payload = yield $message->buffer();
+     * }
+     * ```
      *
-     * @return Promise|\Generator|null If a promise is returned from this method (or generator run
-     *     as a coroutine), messages will not be read from the client until the promise resolves.
-     */
-    abstract public function onOpen(Client $client, Request $request);
-
-    /**
-     * Invoked when data messages arrive from the client.
-     *
-     * @param Client  $client  The client sending the message.
-     * @param Message $message A stream of data received from the client
+     * @param Client  $client  The websocket client connection.
+     * @param Request $request The HTTP request that instigated the connection.
      *
      * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
      */
-    abstract public function onData(Client $client, Message $message);
-
-    /**
-     * Invoked when the close handshake completes.
-     *
-     * @param Client $client The client which closed the connection.
-     * @param ClosedException|null $exception Reason the connection was closed or null if the close was initiated
-     *     by the server.
-     *
-     * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
-     */
-    abstract public function onClose(Client $client, ?ClosedException $exception);
+    abstract public function onConnection(Client $client, Request $request);
 
     /**
      * @param Options|null $options
@@ -260,9 +243,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
 
         try {
-            yield call([$this, 'onOpen'], $client, $request);
-
-            Promise\rethrow(new Coroutine($this->readClient($client)));
+            Promise\rethrow(new Coroutine($this->readClient($client, $request)));
 
             while (($chunk = yield $socket->read()) !== null) {
                 $frames = $parser($chunk);
@@ -290,13 +271,10 @@ abstract class Websocket implements RequestHandler, ServerObserver
         }
     }
 
-    private function readClient(Client $client): \Generator
+    private function readClient(Client $client, Request $request): \Generator
     {
         try {
-            while ($message = yield $client->receive()) {
-                \assert($message instanceof Message);
-                yield call([$this, 'onData'], $client, $message);
-            }
+            yield call([$this, 'onConnection'], $client, $request);
         } catch (ClosedException $exception) {
             $code = $exception->getCode();
             if ($code !== Code::NORMAL_CLOSE && $code !== Code::GOING_AWAY) {
@@ -308,14 +286,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $this->logger->error((string) $exception);
             $code = Code::UNEXPECTED_SERVER_ERROR;
             $reason = 'Internal server error, aborting';
-            $exception = new ClosedException('Connection closed due to application error', $code, $reason);
             yield $client->close($code, $reason);
-        }
-
-        try {
-            yield call([$this, 'onClose'], $client, $exception ?? null);
-        } catch (\Throwable $exception) {
-            $this->logger->error((string) $exception);
         }
     }
 

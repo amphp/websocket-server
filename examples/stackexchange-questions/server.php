@@ -16,8 +16,6 @@ use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket;
 use Amp\Websocket\Client;
-use Amp\Websocket\ClosedException;
-use Amp\Websocket\Message;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -77,19 +75,9 @@ $websocket = new class extends Websocket {
         return $response;
     }
 
-    public function onOpen(Client $client, Request $request): void
+    public function onConnection(Client $client, Request $request): \Generator
     {
-        // do nothing
-    }
-
-    public function onData(Client $client, Message $message): void
-    {
-        // do nothing
-    }
-
-    public function onClose(Client $client, ?ClosedException $exception): void
-    {
-        // do nothing
+        while (yield $client->receive()); // Ignore received messages
     }
 };
 
