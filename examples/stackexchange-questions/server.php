@@ -10,14 +10,15 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\StaticContent\DocumentRoot;
-use Amp\Http\Server\Websocket\Websocket;
-use Amp\Http\Websocket\Client;
-use Amp\Http\Websocket\Message;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket;
+use Amp\Websocket\Client;
+use Amp\Websocket\ClosedException;
+use Amp\Websocket\Message;
+use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 
@@ -86,7 +87,7 @@ $websocket = new class extends Websocket {
         // do nothing
     }
 
-    public function onClose(Client $client, int $code, string $reason): void
+    public function onClose(Client $client, ?ClosedException $exception): void
     {
         // do nothing
     }

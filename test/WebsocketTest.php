@@ -1,6 +1,6 @@
 <?php
 
-namespace Amp\Http\Server\Websocket\Test;
+namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
 use Amp\Http\Server\Driver\Client as HttpClient;
@@ -9,11 +9,11 @@ use Amp\Http\Server\RequestBody;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
-use Amp\Http\Server\Websocket\Websocket;
 use Amp\Http\Status;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Socket;
+use Amp\Websocket\Server\Websocket;
 use League\Uri;
 use Psr\Log\NullLogger;
 
@@ -36,6 +36,7 @@ class WebsocketTest extends TestCase
             );
 
             $websocket = $this->getMockForAbstractClass(Websocket::class);
+            \assert($websocket instanceof Websocket);
 
             $websocket->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
                 ->method('onHandshake')

@@ -28,7 +28,7 @@
     "require": {
         "php": ">=7.1",
         "amphp/amp": "^2.0.3",
-        "amphp/byte-stream": "^1.3",
+        "amphp/byte-stream": "^1.5",
         "amphp/http": "^1",
         "amphp/http-server": "^1 || ^0.8",
         "amphp/socket": "^0.10.5",
@@ -51,12 +51,17 @@
     },
     "autoload": {
         "psr-4": {
-            "Amp\\Http\\Server\\Websocket\\": "src"
+            "Amp\\Websocket\\Server\\": "src"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Amp\\Http\\Server\\Websocket\\Test\\": "test"
+            "Amp\\Websocket\\Server\\Test\\": "test"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.1"
         }
     },
     "scripts": {

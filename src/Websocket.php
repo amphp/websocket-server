@@ -1,6 +1,6 @@
 <?php
 
-namespace Amp\Http\Server\Websocket;
+namespace Amp\Websocket\Server;
 
 use Amp\Coroutine;
 use Amp\Deferred;
@@ -11,20 +11,20 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
-use Amp\Http\Websocket\Application;
-use Amp\Http\Websocket\Client;
-use Amp\Http\Websocket\Code;
-use Amp\Http\Websocket\Message;
-use Amp\Http\Websocket\Rfc6455Client;
-use Amp\Http\Websocket\Rfc7692Compression;
 use Amp\Promise;
 use Amp\Socket\Socket;
 use Amp\Success;
+use Amp\Websocket\Client;
+use Amp\Websocket\ClosedException;
+use Amp\Websocket\Code;
+use Amp\Websocket\Message;
+use Amp\Websocket\Rfc6455Client;
+use Amp\Websocket\Rfc7692Compression;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
-use function Amp\Http\Websocket\generateAcceptFromKey;
+use function Amp\Websocket\generateAcceptFromKey;
 
-abstract class Websocket implements Application, RequestHandler, ServerObserver
+abstract class Websocket implements RequestHandler, ServerObserver
 {
     /** @var PsrLogger */
     private $logger;
@@ -94,12 +94,12 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
      * Invoked when the close handshake completes.
      *
      * @param Client $client The client which closed the connection.
-     * @param int    $code   The websocket code describing the close
-     * @param string $reason The reason for the close (may be empty)
+     * @param ClosedException|null $exception Reason the connection was closed or null if the close was initiated
+     *     by the server.
      *
      * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
      */
-    abstract public function onClose(Client $client, int $code, string $reason);
+    abstract public function onClose(Client $client, ?ClosedException $exception);
 
     /**
      * @param Options|null $options
@@ -233,7 +233,7 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
 
     private function reapClient(Socket $socket, Request $request, ?Rfc7692Compression $compressionContext): void
     {
-        $client = new Rfc6455Client($socket, $this->logger, $this->options, false, $compressionContext);
+        $client = new Rfc6455Client($socket, $this->options, false, $compressionContext);
 
         $id = $client->getId();
 
@@ -249,7 +249,7 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
 
         \assert($this->logger->debug(\sprintf('Upgraded %s to websocket connection', $client->getRemoteAddress())) || true);
 
-        $parser = $client->setup($this);
+        $parser = $client->setup();
         Promise\rethrow(new Coroutine($this->runClient($request, $client, $socket, $parser)));
     }
 
@@ -262,6 +262,8 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
         try {
             yield call([$this, 'onOpen'], $client, $request);
 
+            Promise\rethrow(new Coroutine($this->readClient($client)));
+
             while (($chunk = yield $socket->read()) !== null) {
                 $frames = $parser($chunk);
 
@@ -273,7 +275,7 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
                 if ($this->framesReadInLastSecond[$id] >= $maxFramesPerSecond) {
                     $this->rateDeferreds[$id] = $deferred = new Deferred;
                     yield $deferred->promise();
-                } else if ($this->bytesReadInLastSecond[$id] >= $maxBytesPerSecond) {
+                } elseif ($this->bytesReadInLastSecond[$id] >= $maxBytesPerSecond) {
                     $this->rateDeferreds[$id] = $deferred = new Deferred;
                     yield $deferred->promise();
                 }
@@ -285,6 +287,35 @@ abstract class Websocket implements Application, RequestHandler, ServerObserver
             yield $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
         } finally {
             unset($this->clients[$id], $this->rateDeferreds[$id], $this->heartbeatTimeouts[$id]);
+        }
+    }
+
+    private function readClient(Client $client): \Generator
+    {
+        try {
+            while ($message = yield $client->receive()) {
+                \assert($message instanceof Message);
+                yield call([$this, 'onData'], $client, $message);
+            }
+        } catch (ClosedException $exception) {
+            $code = $exception->getCode();
+            if ($code !== Code::NORMAL_CLOSE && $code !== Code::GOING_AWAY) {
+                $this->logger->notice(
+                    \sprintf('Client closed websocket reporting error (code: %d): %s', $code, $exception->getReason())
+                );
+            }
+        } catch (\Throwable $exception) {
+            $this->logger->error((string) $exception);
+            $code = Code::UNEXPECTED_SERVER_ERROR;
+            $reason = 'Internal server error, aborting';
+            $exception = new ClosedException('Connection closed due to application error', $code, $reason);
+            yield $client->close($code, $reason);
+        }
+
+        try {
+            yield call([$this, 'onClose'], $client, $exception ?? null);
+        } catch (\Throwable $exception) {
+            $this->logger->error((string) $exception);
         }
     }
 

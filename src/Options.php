@@ -1,8 +1,8 @@
 <?php
 
-namespace Amp\Http\Server\Websocket;
+namespace Amp\Websocket\Server;
 
-class Options extends \Amp\Http\Websocket\Options
+class Options extends \Amp\Websocket\Options
 {
     private $heartbeatPeriod = 10;
     private $queuedPingLimit = 3;
