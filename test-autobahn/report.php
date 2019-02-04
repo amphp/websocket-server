@@ -1,18 +1,18 @@
 <?php
 
-require dirname(__DIR__) . "/vendor/autoload.php";
+require \dirname(__DIR__) . "/vendor/autoload.php";
 
 const REPORT_PATH = __DIR__ . "/reports/servers/index.json";
 
 $climate = new League\CLImate\CLImate;
 
-if (!file_exists(REPORT_PATH)) {
+if (!\file_exists(REPORT_PATH)) {
     $climate->red("Could not find autobahn test results json file");
     exit(1);
 }
 
-$report = file_get_contents(REPORT_PATH);
-$report = json_decode($report, true);
+$report = \file_get_contents(REPORT_PATH);
+$report = \json_decode($report, true);
 
 if (!isset($report["amphp-websocket-server"])) {
     $climate->red("Could not find result set for amphp-websocket-server");
