@@ -74,6 +74,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * ```
      * while ($message = yield $client->receive()) {
      *     $payload = yield $message->buffer();
+     *     yield $client->send('Message of length ' . \strlen($payload) . 'received');
      * }
      * ```
      *
@@ -218,11 +219,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
     {
         $client = new Rfc6455Client($socket, $this->options, false, $compressionContext);
 
-        $id = $client->getId();
-
-        $this->clients[$id] = $client;
-        $this->heartbeatTimeouts[$id] = $this->now + $this->options->getHeartbeatPeriod();
-
         // Setting via stream API doesn't seem to work...
         if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
             $sock = \socket_import_stream($socket->getResource());
@@ -230,63 +226,34 @@ abstract class Websocket implements RequestHandler, ServerObserver
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
-        \assert($this->logger->debug(\sprintf('Upgraded %s to websocket connection', $client->getRemoteAddress())) || true);
+        \assert($this->logger->debug(\sprintf('Upgraded %s #%d to websocket connection', $client->getRemoteAddress(), $client->getId())) || true);
 
-        $parser = $client->setup();
-        Promise\rethrow(new Coroutine($this->runClient($request, $client, $socket, $parser)));
+        Promise\rethrow(new Coroutine($this->runClient($client, $request)));
     }
 
-    private function runClient(Request $request, Client $client, Socket $socket, callable $parser): \Generator
+    private function runClient(Client $client, Request $request): \Generator
     {
         $id = $client->getId();
-        $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
-        $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
 
-        try {
-            Promise\rethrow(new Coroutine($this->readClient($client, $request)));
+        $this->clients[$id] = $client;
+        $this->heartbeatTimeouts[$id] = $this->now + $this->options->getHeartbeatPeriod();
 
-            while (($chunk = yield $socket->read()) !== null) {
-                $frames = $parser($chunk);
-
-                $this->framesReadInLastSecond[$id] = ($this->framesReadInLastSecond[$id] ?? 0) + $frames;
-                $this->bytesReadInLastSecond[$id] = ($this->bytesReadInLastSecond[$id] ?? 0) + \strlen($chunk);
-
-                $chunk = null; // Free memory from last chunk read.
-
-                if ($this->framesReadInLastSecond[$id] >= $maxFramesPerSecond) {
-                    $this->rateDeferreds[$id] = $deferred = new Deferred;
-                    yield $deferred->promise();
-                } elseif ($this->bytesReadInLastSecond[$id] >= $maxBytesPerSecond) {
-                    $this->rateDeferreds[$id] = $deferred = new Deferred;
-                    yield $deferred->promise();
-                }
-            }
-
-            yield $client->close(Code::ABNORMAL_CLOSE, 'Client closed underlying TCP connection');
-        } catch (\Throwable $exception) {
-            $this->logger->error((string) $exception);
-            yield $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
-        } finally {
-            unset($this->clients[$id], $this->rateDeferreds[$id], $this->heartbeatTimeouts[$id]);
-        }
-    }
-
-    private function readClient(Client $client, Request $request): \Generator
-    {
         try {
             yield call([$this, 'onConnection'], $client, $request);
         } catch (ClosedException $exception) {
             $code = $exception->getCode();
-            if ($code !== Code::NORMAL_CLOSE && $code !== Code::GOING_AWAY) {
+            if ($code !== Code::NORMAL_CLOSE && $code !== Code::GOING_AWAY && $code !== Code::NONE) {
                 $this->logger->notice(
                     \sprintf('Client closed websocket reporting error (code: %d): %s', $code, $exception->getReason())
                 );
             }
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);
-            $code = Code::UNEXPECTED_SERVER_ERROR;
-            $reason = 'Internal server error, aborting';
-            yield $client->close($code, $reason);
+            if ($client->isConnected()) {
+                yield $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+            }
+        } finally {
+            unset($this->clients[$id], $this->heartbeatTimeouts[$id]);
         }
     }
 
@@ -300,7 +267,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     final public function broadcast(string $data, array $exceptIds = []): Promise
     {
-        return $this->broadcastTo($data, false, $exceptIds);
+        return $this->broadcastData($data, false, $exceptIds);
     }
 
     /**
@@ -313,10 +280,10 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     final public function broadcastBinary(string $data, array $exceptIds = []): Promise
     {
-        return $this->broadcastTo($data, true, $exceptIds);
+        return $this->broadcastData($data, true, $exceptIds);
     }
 
-    private function broadcastTo(string $data, bool $binary, array $exceptIds = []): Promise
+    private function broadcastData(string $data, bool $binary, array $exceptIds = []): Promise
     {
         $promises = [];
         if (empty($exceptIds)) {
@@ -350,7 +317,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     final public function multicast(string $data, array $clientIds): Promise
     {
-        return $this->multicastTo($data, false, $clientIds);
+        return $this->multicastData($data, false, $clientIds);
     }
 
     /**
@@ -363,10 +330,10 @@ abstract class Websocket implements RequestHandler, ServerObserver
      */
     final public function multicastBinary(string $data, array $clientIds): Promise
     {
-        return $this->multicastTo($data, true, $clientIds);
+        return $this->multicastData($data, true, $clientIds);
     }
 
-    private function multicastTo(string $data, bool $binary, array $clientIds): Promise
+    private function multicastData(string $data, bool $binary, array $clientIds): Promise
     {
         $promises = [];
         foreach ($clientIds as $id) {
