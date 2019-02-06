@@ -161,18 +161,21 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param int $clientId
      *
      * @return array [
-     *     'bytes_read'        => int,
-     *     'bytes_sent'        => int,
-     *     'frames_read'       => int,
-     *     'frames_sent'       => int,
-     *     'messages_read'     => int,
-     *     'messages_sent'     => int,
-     *     'connected_at'      => int,
-     *     'closed_at'         => int,
-     *     'last_read_at'      => int,
-     *     'last_send_at'      => int,
-     *     'last_data_read_at' => int,
-     *     'last_data_sent_at' => int,
+     *     'bytes_read'          => int,
+     *     'bytes_sent'          => int,
+     *     'frames_read'         => int,
+     *     'frames_sent'         => int,
+     *     'messages_read'       => int,
+     *     'messages_sent'       => int,
+     *     'connected_at'        => int,
+     *     'closed_at'           => int,
+     *     'close_code'          => int,
+     *     'close_reason'        => string,
+     *     'last_read_at'        => int,
+     *     'last_send_at'        => int,
+     *     'last_data_read_at'   => int,
+     *     'last_data_sent_at'   => int,
+     *     'compression_enabled' => bool,
      * ]
      */
     final public function getInfo(int $clientId): array
