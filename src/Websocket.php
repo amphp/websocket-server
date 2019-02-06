@@ -161,6 +161,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param int $clientId
      *
      * @return array [
+     *     'remote_address'      => string|null,
      *     'bytes_read'          => int,
      *     'bytes_sent'          => int,
      *     'frames_read'         => int,

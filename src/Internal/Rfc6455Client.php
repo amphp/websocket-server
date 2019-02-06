@@ -34,6 +34,7 @@ class Rfc6455Client
     public $compressionContext;
 
     // getInfo() properties
+    public $remoteAddress;
     public $connectedAt;
     public $closedAt = 0;
     public $closeCode;
