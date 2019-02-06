@@ -227,6 +227,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         $client->capacity = $this->maxBytesPerMinute;
         $client->connectedAt = $this->now;
         $client->id = (int) $socket->getResource();
+        $client->remoteAddress = $socket->getRemoteAddress();
         $client->socket = $socket;
         $client->compressionContext = $compressionContext;
 
@@ -925,6 +926,7 @@ class Rfc6455Gateway implements RequestHandler, ServerObserver
         $client = $this->clients[$clientId];
 
         return [
+            'remote_address' => $client->remoteAddress,
             'bytes_read' => $client->bytesRead,
             'bytes_sent' => $client->bytesSent,
             'frames_read' => $client->framesRead,
