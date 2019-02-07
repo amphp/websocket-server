@@ -129,7 +129,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             return $response;
         }
 
-        if (null !== yield $request->getBody()->read()) {
+        if ('' !== yield $request->getBody()->buffer()) {
             return yield $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
         }
 
