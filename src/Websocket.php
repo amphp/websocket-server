@@ -3,7 +3,6 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Coroutine;
-use Amp\Deferred;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
@@ -36,15 +35,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
     /** @var Rfc6455Client[] */
     private $clients = [];
-
-    /** @var int[] */
-    private $framesReadInLastSecond = [];
-
-    /** @var int[] */
-    private $bytesReadInLastSecond = [];
-
-    /** @var Deferred[] */
-    private $rateDeferreds = [];
 
     /** @var int[] */
     private $heartbeatTimeouts = [];
@@ -426,16 +416,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
             } else {
                 break;
             }
-        }
-
-        $this->framesReadInLastSecond = [];
-        $this->bytesReadInLastSecond = [];
-
-        $rateDeferreds = $this->rateDeferreds;
-        $this->rateDeferreds = [];
-
-        foreach ($rateDeferreds as $deferred) {
-            $deferred->resolve();
         }
     }
 }
