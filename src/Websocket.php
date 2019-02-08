@@ -242,21 +242,27 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
         if ($client->isConnected()) {
             yield $client->close($code ?? Code::NORMAL_CLOSE, $reason ?? '');
-        } else {
-            $code = $client->getCloseCode();
-            switch ($code) {
-                case Code::NORMAL_CLOSE:
-                case Code::GOING_AWAY:
-                case Code::NONE:
-                    return;
+            return;
+        }
 
-                default:
-                    $this->logger->notice(\sprintf(
-                        'Client closed websocket reporting error (code: %d): %s',
-                        $code,
-                        $client->getCloseReason()
-                    ));
-            }
+        if (!$client->didPeerInitiateClose()) {
+            return;
+        }
+
+        $code = $client->getCloseCode();
+        switch ($code) {
+            case Code::PROTOCOL_ERROR:
+            case Code::UNACCEPTABLE_TYPE:
+            case Code::POLICY_VIOLATION:
+            case Code::INCONSISTENT_FRAME_DATA_TYPE:
+            case Code::MESSAGE_TOO_LARGE:
+            case Code::EXPECTED_EXTENSION_MISSING:
+            case Code::BAD_GATEWAY:
+                $this->logger->notice(\sprintf(
+                    'Client initiated websocket close reporting error (code: %d): %s',
+                    $code,
+                    $client->getCloseReason()
+                ));
         }
     }
 
@@ -416,18 +422,18 @@ abstract class Websocket implements RequestHandler, ServerObserver
         $queuedPingLimit = $this->options->getQueuedPingLimit();
 
         foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
-            if ($expiryTime < $this->now) {
-                $client = $this->clients[$clientId];
-                unset($this->heartbeatTimeouts[$clientId]);
-                $this->heartbeatTimeouts[$clientId] = $this->now + $heartbeatPeriod;
-
-                if ($client->getUnansweredPingCount() > $queuedPingLimit) {
-                    $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
-                } else {
-                    $client->ping();
-                }
-            } else {
+            if ($expiryTime >= $this->now) {
                 break;
+            }
+
+            $client = $this->clients[$clientId];
+            unset($this->heartbeatTimeouts[$clientId]);
+            $this->heartbeatTimeouts[$clientId] = $this->now + $heartbeatPeriod;
+
+            if ($client->getUnansweredPingCount() > $queuedPingLimit) {
+                $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+            } else {
+                $client->ping();
             }
         }
     }
