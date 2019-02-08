@@ -231,19 +231,32 @@ abstract class Websocket implements RequestHandler, ServerObserver
         try {
             yield call([$this, 'onConnection'], $client, $request);
         } catch (ClosedException $exception) {
-            $code = $exception->getCode();
-            if ($code !== Code::NORMAL_CLOSE && $code !== Code::GOING_AWAY && $code !== Code::NONE) {
-                $this->logger->notice(
-                    \sprintf('Client closed websocket reporting error (code: %d): %s', $code, $exception->getReason())
-                );
-            }
+            // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);
-            if ($client->isConnected()) {
-                yield $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
-            }
+            $code = Code::UNEXPECTED_SERVER_ERROR;
+            $reason = 'Internal server error, aborting';
         } finally {
             unset($this->clients[$id], $this->heartbeatTimeouts[$id]);
+        }
+
+        if ($client->isConnected()) {
+            yield $client->close($code ?? Code::NORMAL_CLOSE, $reason ?? '');
+        } else {
+            $code = $client->getCloseCode();
+            switch ($code) {
+                case Code::NORMAL_CLOSE:
+                case Code::GOING_AWAY:
+                case Code::NONE:
+                    return;
+
+                default:
+                    $this->logger->notice(\sprintf(
+                        'Client closed websocket reporting error (code: %d): %s',
+                        $code,
+                        $client->getCloseReason()
+                    ));
+            }
         }
     }
 
