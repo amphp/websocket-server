@@ -16,8 +16,9 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
-use Amp\Websocket\Rfc6455Client;
-use Amp\Websocket\Rfc7692Compression;
+use Amp\Websocket\CompressionContext;
+use Amp\Websocket\CompressionContextFactory;
+use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 use function Amp\Websocket\generateAcceptFromKey;
@@ -33,7 +34,13 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /** @var ErrorHandler */
     private $errorHandler;
 
-    /** @var Rfc6455Client[] */
+    /** @var CompressionContextFactory */
+    private $compressionFactory;
+
+    /** @var ClientFactory */
+    private $clientFactory;
+
+    /** @var Client[] */
     private $clients = [];
 
     /** @var int[] */
@@ -77,10 +84,17 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
     /**
      * @param Options|null $options
+     * @param CompressionContextFactory|null $compressionFactory
+     * @param ClientFactory|null $clientFactory
      */
-    public function __construct(?Options $options = null)
-    {
+    public function __construct(
+        ?Options $options = null,
+        ?CompressionContextFactory $compressionFactory = null,
+        ?ClientFactory $clientFactory = null
+    ) {
         $this->options = $options ?? new Options;
+        $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
+        $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
     }
 
     final public function handleRequest(Request $request): Promise
@@ -178,7 +192,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $extensions = \array_map('trim', \explode(',', $extensions));
 
             foreach ($extensions as $extension) {
-                if ($compressionContext = Rfc7692Compression::fromClientHeader($extension, $headerLine)) {
+                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
                     $response->setHeader('Sec-Websocket-Extensions', $headerLine);
                     break;
                 }
@@ -190,7 +204,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
                 '%s::onHandshake() must return or resolve to an instance of %s, %s returned',
-                self::class,
+                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
                 Response::class,
                 \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
             ));
@@ -205,9 +219,9 @@ abstract class Websocket implements RequestHandler, ServerObserver
         return $response;
     }
 
-    private function reapClient(Socket $socket, Request $request, ?Rfc7692Compression $compressionContext): void
+    private function reapClient(Socket $socket, Request $request, ?CompressionContext $compressionContext): void
     {
-        $client = new Rfc6455Client($socket, $this->options, false, $compressionContext);
+        $client = $this->clientFactory->createClient($socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't seem to work...
         if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
