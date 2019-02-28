@@ -66,7 +66,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
     abstract public function onHandshake(Request $request, Response $response);
 
     /**
-     * This method should handle messages received on the websocket connection.
+     * This method should handle messages received on the websocket connection. The connection is automatically
+     * closed when the promise (or coroutine) is resolved.
      *
      * ```
      * while ($message = yield $client->receive()) {
@@ -78,7 +79,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param Client  $client  The websocket client connection.
      * @param Request $request The HTTP request that instigated the connection.
      *
-     * @return Promise|\Generator|null Generators returned from this method are run as coroutines.
+     * @return Promise|\Generator Generators returned from this method are run as coroutines.
      */
     abstract public function onConnection(Client $client, Request $request);
 
@@ -123,13 +124,13 @@ abstract class Websocket implements RequestHandler, ServerObserver
         /** @var \Amp\Http\Server\Response $response */
         if ($request->getMethod() !== 'GET') {
             $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
-            $response->setHeader('Allow', 'GET');
+            $response->setHeader('allow', 'GET');
             return $response;
         }
 
         if ($request->getProtocolVersion() !== '1.1') {
             $response = yield $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
-            $response->setHeader('Upgrade', 'websocket');
+            $response->setHeader('upgrade', 'websocket');
             return $response;
         }
 
@@ -138,7 +139,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         }
 
         $hasUpgradeWebsocket = false;
-        foreach ($request->getHeaderArray('Upgrade') as $value) {
+        foreach ($request->getHeaderArray('upgrade') as $value) {
             if (\strcasecmp($value, 'websocket') === 0) {
                 $hasUpgradeWebsocket = true;
                 break;
@@ -149,11 +150,11 @@ abstract class Websocket implements RequestHandler, ServerObserver
         }
 
         $hasConnectionUpgrade = false;
-        foreach ($request->getHeaderArray('Connection') as $value) {
+        foreach ($request->getHeaderArray('connection') as $value) {
             $values = \array_map('trim', \explode(',', $value));
 
             foreach ($values as $token) {
-                if (\strcasecmp($token, 'Upgrade') === 0) {
+                if (\strcasecmp($token, 'upgrade') === 0) {
                     $hasConnectionUpgrade = true;
                     break;
                 }
@@ -163,43 +164,23 @@ abstract class Websocket implements RequestHandler, ServerObserver
         if (!$hasConnectionUpgrade) {
             $reason = 'Bad Request: "Connection: Upgrade" header required';
             $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
-            $response->setHeader('Upgrade', 'websocket');
+            $response->setHeader('upgrade', 'websocket');
             return $response;
         }
 
-        if (!$acceptKey = $request->getHeader('Sec-Websocket-Key')) {
+        if (!$acceptKey = $request->getHeader('sec-websocket-key')) {
             $reason = 'Bad Request: "Sec-Websocket-Key" header required';
             return yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
         }
 
-        if (!\in_array('13', $request->getHeaderArray('Sec-Websocket-Version'), true)) {
+        if (!\in_array('13', $request->getHeaderArray('sec-websocket-version'), true)) {
             $reason = 'Bad Request: Requested Websocket version unavailable';
             $response = yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
-            $response->setHeader('Sec-Websocket-Version', '13');
+            $response->setHeader('sec-websocket-version', '13');
             return $response;
         }
 
-        $response = new Response(Status::SWITCHING_PROTOCOLS, [
-            'Connection'           => 'upgrade',
-            'Upgrade'              => 'websocket',
-            'Sec-WebSocket-Accept' => generateAcceptFromKey($acceptKey),
-        ]);
-
-        $compressionContext = null;
-        if ($this->options->isCompressionEnabled()) {
-            $extensions = (string) $request->getHeader('Sec-Websocket-Extensions');
-
-            $extensions = \array_map('trim', \explode(',', $extensions));
-
-            foreach ($extensions as $extension) {
-                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
-                    $response->setHeader('Sec-Websocket-Extensions', $headerLine);
-                    break;
-                }
-            }
-        }
-
-        $response = yield call([$this, 'onHandshake'], $request, $response);
+        $response = yield call([$this, 'onHandshake'], $request, new Response(Status::SWITCHING_PROTOCOLS));
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
@@ -210,18 +191,36 @@ abstract class Websocket implements RequestHandler, ServerObserver
             ));
         }
 
-        if ($response->getStatus() === Status::SWITCHING_PROTOCOLS) {
-            $response->upgrade(function (Socket $socket) use ($request, $compressionContext) {
-                $this->reapClient($socket, $request, $compressionContext);
-            });
+        if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
+            return $response;
         }
+
+        $response->setHeader('connection', 'upgrade');
+        $response->setHeader('upgrade', 'websocket');
+        $response->setHeader('sec-websocket-accept', generateAcceptFromKey($acceptKey));
+
+        $compressionContext = null;
+        if ($this->options->isCompressionEnabled()) {
+            $extensions = \array_map('trim', \explode(',', $request->getHeader('sec-websocket-extensions')));
+
+            foreach ($extensions as $extension) {
+                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
+                    $response->setHeader('sec-websocket-extensions', $headerLine);
+                    break;
+                }
+            }
+        }
+
+        $response->upgrade(function (Socket $socket) use ($request, $compressionContext): void {
+            $this->reapClient($socket, $request, $compressionContext);
+        });
 
         return $response;
     }
 
     private function reapClient(Socket $socket, Request $request, ?CompressionContext $compressionContext): void
     {
-        $client = $this->clientFactory->createClient($socket, $this->options, $compressionContext);
+        $client = $this->clientFactory->createClient($request, $socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't seem to work...
         if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
@@ -230,7 +229,11 @@ abstract class Websocket implements RequestHandler, ServerObserver
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
-        \assert($this->logger->debug(\sprintf('Upgraded %s #%d to websocket connection', $client->getRemoteAddress(), $client->getId())) || true);
+        \assert($this->logger->debug(\sprintf(
+            'Upgraded %s #%d to websocket connection',
+            $client->getRemoteAddress(),
+            $client->getId()
+        )) || true);
 
         Promise\rethrow(new Coroutine($this->runClient($client, $request)));
     }
@@ -327,7 +330,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
                 $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
             }
         }
-        return Promise\all($promises);
+        return Promise\any($promises);
     }
 
     /**
@@ -366,7 +369,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $client = $this->clients[$id];
             $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
         }
-        return Promise\all($promises);
+        return Promise\any($promises);
     }
 
     /**
@@ -394,7 +397,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
         if ($this->options->isCompressionEnabled() && !\extension_loaded('zlib')) {
             $this->options = $this->options->withoutCompression();
-            $this->logger->notice('Compression is enabled in the options, but ext-zlib is required for compression');
+            $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
         $server->getTimeReference()->onTimeUpdate(\Closure::fromCallable([$this, 'timeout']));
@@ -422,7 +425,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $promises[] = $client->close($code, $reason);
         }
 
-        return Promise\all($promises);
+        return Promise\any($promises);
     }
 
     /**
