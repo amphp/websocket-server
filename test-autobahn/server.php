@@ -25,12 +25,12 @@ Amp\Loop::run(function () {
     // @formatter:off
     $websocket = new class($options) extends Websocket {
         // @formatter:on
-        public function onHandshake(Request $request, Response $response): Response
+        protected function onHandshake(Request $request, Response $response): Response
         {
             return $response;
         }
 
-        public function onConnection(Client $client, Request $request): \Generator
+        protected function onConnect(Client $client, Request $request)
         {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
