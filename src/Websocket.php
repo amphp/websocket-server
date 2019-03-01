@@ -44,11 +44,11 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /** @var Client[] */
     private $clients = [];
 
-    /** @var int[] */
-    private $heartbeatTimeouts = [];
+    /** @var \Closure|null */
+    private $onHandshake;
 
-    /** @var int */
-    private $now;
+    /** @var \Closure|null */
+    private $onConnect;
 
     /**
      * @param Options|null                   $options
@@ -79,7 +79,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      *     connection or a new response object to deny the connection. May also return a
      *     promise or generator to run as a coroutine.
      */
-    abstract public function onHandshake(Request $request, Response $response);
+    abstract protected function onHandshake(Request $request, Response $response);
 
     /**
      * This method should handle messages received on the websocket connection. The connection is automatically
@@ -97,7 +97,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      *
      * @return Promise|\Generator Generators returned from this method are run as coroutines.
      */
-    abstract public function onConnection(Client $client, Request $request);
+    abstract protected function onConnect(Client $client, Request $request);
 
     final public function handleRequest(Request $request): Promise
     {
@@ -181,7 +181,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             return $response;
         }
 
-        $response = yield call([$this, 'onHandshake'], $request, new Response(Status::SWITCHING_PROTOCOLS));
+        $response = yield call($this->onHandshake, $request, new Response(Status::SWITCHING_PROTOCOLS));
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
@@ -245,45 +245,39 @@ abstract class Websocket implements RequestHandler, ServerObserver
     private function runClient(Client $client, Request $request): \Generator
     {
         $id = $client->getId();
-
         $this->clients[$id] = $client;
-        $this->heartbeatTimeouts[$id] = $this->now + $this->options->getHeartbeatPeriod();
+
+        $client->onClose(function (Client $client, int $code, string $reason): void {
+            $id = $client->getId();
+            unset($this->clients[$id]);
+
+            if (!$client->didPeerInitiateClose()) {
+                return;
+            }
+
+            switch ($code) {
+                case Code::PROTOCOL_ERROR:
+                case Code::UNACCEPTABLE_TYPE:
+                case Code::POLICY_VIOLATION:
+                case Code::INCONSISTENT_FRAME_DATA_TYPE:
+                case Code::MESSAGE_TOO_LARGE:
+                case Code::EXPECTED_EXTENSION_MISSING:
+                case Code::BAD_GATEWAY:
+                    $this->logger->notice(\sprintf(
+                        'Client initiated websocket close reporting error (code: %d): %s',
+                        $code,
+                        $reason
+                    ));
+            }
+        });
 
         try {
-            yield call([$this, 'onConnection'], $client, $request);
+            yield call($this->onConnect, $client, $request);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);
-            $code = Code::UNEXPECTED_SERVER_ERROR;
-            $reason = 'Internal server error, aborting';
-        } finally {
-            unset($this->clients[$id], $this->heartbeatTimeouts[$id]);
-        }
-
-        if ($client->isConnected()) {
-            yield $client->close($code ?? Code::NORMAL_CLOSE, $reason ?? '');
-            return;
-        }
-
-        if (!$client->didPeerInitiateClose()) {
-            return;
-        }
-
-        $code = $client->getCloseCode();
-        switch ($code) {
-            case Code::PROTOCOL_ERROR:
-            case Code::UNACCEPTABLE_TYPE:
-            case Code::POLICY_VIOLATION:
-            case Code::INCONSISTENT_FRAME_DATA_TYPE:
-            case Code::MESSAGE_TOO_LARGE:
-            case Code::EXPECTED_EXTENSION_MISSING:
-            case Code::BAD_GATEWAY:
-                $this->logger->notice(\sprintf(
-                    'Client initiated websocket close reporting error (code: %d): %s',
-                    $code,
-                    $client->getCloseReason()
-                ));
+            $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
         }
     }
 
@@ -404,7 +398,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        $server->getTimeReference()->onTimeUpdate(\Closure::fromCallable([$this, 'timeout']));
+        $this->onHandshake = \Closure::fromCallable([$this, 'onHandshake']);
+        $this->onConnect = \Closure::fromCallable([$this, 'onConnect']);
 
         return new Success;
     }
@@ -429,33 +424,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $promises[] = $client->close($code, $reason);
         }
 
+        $this->onHandshake = $this->onConnect = null;
+
         return Promise\any($promises);
-    }
-
-    /**
-     * @param int $now Current timestamp.
-     */
-    private function timeout(int $now): void
-    {
-        $this->now = $now;
-
-        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
-        $queuedPingLimit = $this->options->getQueuedPingLimit();
-
-        foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
-            if ($expiryTime >= $this->now) {
-                break;
-            }
-
-            $client = $this->clients[$clientId];
-            unset($this->heartbeatTimeouts[$clientId]);
-            $this->heartbeatTimeouts[$clientId] = $this->now + $heartbeatPeriod;
-
-            if ($client->getUnansweredPingCount() > $queuedPingLimit) {
-                $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
-            } else {
-                $client->ping();
-            }
-        }
     }
 }
