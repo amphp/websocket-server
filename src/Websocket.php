@@ -18,6 +18,7 @@ use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
 use Amp\Websocket\CompressionContext;
 use Amp\Websocket\CompressionContextFactory;
+use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
@@ -56,7 +57,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * be automatically accepted.
      * Return an instance of \Amp\Http\Server\Response to reject the websocket connection request.
      *
-     * @param Request  $request  The HTTP request that instigated the handshake
+     * @param Request  $request The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Response|Promise|\Generator Return the given response to accept the
@@ -76,7 +77,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * }
      * ```
      *
-     * @param Client  $client  The websocket client connection.
+     * @param Client  $client The websocket client connection.
      * @param Request $request The HTTP request that instigated the connection.
      *
      * @return Promise|\Generator Generators returned from this method are run as coroutines.
@@ -84,9 +85,9 @@ abstract class Websocket implements RequestHandler, ServerObserver
     abstract public function onConnection(Client $client, Request $request);
 
     /**
-     * @param Options|null $options
+     * @param Options|null                   $options
      * @param CompressionContextFactory|null $compressionFactory
-     * @param ClientFactory|null $clientFactory
+     * @param ClientFactory|null             $clientFactory
      */
     public function __construct(
         ?Options $options = null,
@@ -229,11 +230,12 @@ abstract class Websocket implements RequestHandler, ServerObserver
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
+        /** @noinspection SuspiciousBinaryOperationInspection */
         \assert($this->logger->debug(\sprintf(
-            'Upgraded %s #%d to websocket connection',
-            $client->getRemoteAddress(),
-            $client->getId()
-        )) || true);
+                'Upgraded %s #%d to websocket connection',
+                $client->getRemoteAddress(),
+                $client->getId()
+            )) || true);
 
         Promise\rethrow(new Coroutine($this->runClient($client, $request)));
     }
@@ -286,7 +288,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
      *
-     * @param string $data      Data to send.
+     * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
@@ -299,7 +301,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a binary message to all clients (except those given in the optional array).
      *
-     * @param string $data      Data to send.
+     * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
@@ -336,7 +338,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a UTF-8 text message to a set of clients.
      *
-     * @param string     $data      Data to send.
+     * @param string     $data Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
@@ -349,7 +351,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a binary message to a set of clients.
      *
-     * @param string     $data      Data to send.
+     * @param string     $data Data to send.
      * @param int[]|null $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
