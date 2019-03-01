@@ -6,6 +6,7 @@ use Amp\Http\Server\Request;
 use Amp\Socket\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\CompressionContext;
+use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 
 final class Rfc6455ClientFactory implements ClientFactory
