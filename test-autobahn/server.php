@@ -22,8 +22,9 @@ Amp\Loop::run(function () {
         ->withMessageSizeLimit(\PHP_INT_MAX)
         ->withValidateUtf8(true);
 
-    $websocket = new class($options) extends Websocket
-    {
+    // @formatter:off
+    $websocket = new class($options) extends Websocket {
+        // @formatter:on
         public function onHandshake(Request $request, Response $response): Response
         {
             return $response;
