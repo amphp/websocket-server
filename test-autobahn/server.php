@@ -8,7 +8,7 @@ use Amp\Http\Server\Server;
 use Amp\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
-use Amp\Websocket\Server\Options;
+use Amp\Websocket\Options;
 use Amp\Websocket\Server\Websocket;
 use Psr\Log\NullLogger;
 
@@ -22,7 +22,8 @@ Amp\Loop::run(function () {
         ->withMessageSizeLimit(\PHP_INT_MAX)
         ->withValidateUtf8(true);
 
-    $websocket = new class($options) extends Websocket {
+    $websocket = new class($options) extends Websocket
+    {
         public function onHandshake(Request $request, Response $response): Response
         {
             return $response;
