@@ -51,6 +51,21 @@ abstract class Websocket implements RequestHandler, ServerObserver
     private $now;
 
     /**
+     * @param Options|null                   $options
+     * @param CompressionContextFactory|null $compressionFactory
+     * @param ClientFactory|null             $clientFactory
+     */
+    public function __construct(
+        ?Options $options = null,
+        ?CompressionContextFactory $compressionFactory = null,
+        ?ClientFactory $clientFactory = null
+    ) {
+        $this->options = $options ?? new Options;
+        $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
+        $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
+    }
+
+    /**
      * Respond to websocket handshake requests.
      * If a websocket application doesn't wish to impose any special constraints on the
      * handshake it doesn't have to do anything in this method and all handshakes will
@@ -83,21 +98,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise|\Generator Generators returned from this method are run as coroutines.
      */
     abstract public function onConnection(Client $client, Request $request);
-
-    /**
-     * @param Options|null                   $options
-     * @param CompressionContextFactory|null $compressionFactory
-     * @param ClientFactory|null             $clientFactory
-     */
-    public function __construct(
-        ?Options $options = null,
-        ?CompressionContextFactory $compressionFactory = null,
-        ?ClientFactory $clientFactory = null
-    ) {
-        $this->options = $options ?? new Options;
-        $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
-        $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
-    }
 
     final public function handleRequest(Request $request): Promise
     {
@@ -230,12 +230,14 @@ abstract class Websocket implements RequestHandler, ServerObserver
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
+        // @formatter:off
         /** @noinspection SuspiciousBinaryOperationInspection */
         \assert($this->logger->debug(\sprintf(
-                'Upgraded %s #%d to websocket connection',
-                $client->getRemoteAddress(),
-                $client->getId()
-            )) || true);
+            'Upgraded %s #%d to websocket connection',
+            $client->getRemoteAddress(),
+            $client->getId()
+        )) || true);
+        // @formatter:on
 
         Promise\rethrow(new Coroutine($this->runClient($client, $request)));
     }
@@ -298,19 +300,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
         return $this->broadcastData($data, false, $exceptIds);
     }
 
-    /**
-     * Send a binary message to all clients (except those given in the optional array).
-     *
-     * @param string $data Data to send.
-     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
-     *
-     * @return \Amp\Promise<int>
-     */
-    final public function broadcastBinary(string $data, array $exceptIds = []): Promise
-    {
-        return $this->broadcastData($data, true, $exceptIds);
-    }
-
     private function broadcastData(string $data, bool $binary, array $exceptIds = []): Promise
     {
         $promises = [];
@@ -336,6 +325,19 @@ abstract class Websocket implements RequestHandler, ServerObserver
     }
 
     /**
+     * Send a binary message to all clients (except those given in the optional array).
+     *
+     * @param string $data Data to send.
+     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
+     *
+     * @return \Amp\Promise<int>
+     */
+    final public function broadcastBinary(string $data, array $exceptIds = []): Promise
+    {
+        return $this->broadcastData($data, true, $exceptIds);
+    }
+
+    /**
      * Send a UTF-8 text message to a set of clients.
      *
      * @param string     $data Data to send.
@@ -346,19 +348,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
     final public function multicast(string $data, array $clientIds): Promise
     {
         return $this->multicastData($data, false, $clientIds);
-    }
-
-    /**
-     * Send a binary message to a set of clients.
-     *
-     * @param string     $data Data to send.
-     * @param int[]|null $clientIds Array of client IDs.
-     *
-     * @return \Amp\Promise<int>
-     */
-    final public function multicastBinary(string $data, array $clientIds): Promise
-    {
-        return $this->multicastData($data, true, $clientIds);
     }
 
     private function multicastData(string $data, bool $binary, array $clientIds): Promise
@@ -372,6 +361,19 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
         }
         return Promise\any($promises);
+    }
+
+    /**
+     * Send a binary message to a set of clients.
+     *
+     * @param string     $data Data to send.
+     * @param int[]|null $clientIds Array of client IDs.
+     *
+     * @return \Amp\Promise<int>
+     */
+    final public function multicastBinary(string $data, array $clientIds): Promise
+    {
+        return $this->multicastData($data, true, $clientIds);
     }
 
     /**
