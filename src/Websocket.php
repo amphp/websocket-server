@@ -143,7 +143,9 @@ abstract class Websocket implements RequestHandler, ServerObserver
             }
         }
         if (!$hasUpgradeWebsocket) {
-            return yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
+            $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
+            $response->setHeader('upgrade', 'websocket');
+            return $response;
         }
 
         $hasConnectionUpgrade = false;
