@@ -11,7 +11,9 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
+use Amp\Promise;
 use Amp\Socket;
+use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\Websocket;
@@ -21,21 +23,23 @@ use function Amp\ByteStream\getStdout;
 require __DIR__ . '/../../vendor/autoload.php';
 
 $websocket = new class extends Websocket {
-    protected function onHandshake(Request $request, Response $response): Response
+    protected function onHandshake(Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
         }
 
-        return $response;
+        return new Success($response);
     }
 
-    protected function onConnect(Client $client, Request $request): \Generator
+    protected function onConnect(Client $client, Request $request): Promise
     {
-        while ($message = yield $client->receive()) {
-            \assert($message instanceof Message);
-            $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
-        }
+        return Amp\call(function () use ($client) {
+            while ($message = yield $client->receive()) {
+                \assert($message instanceof Message);
+                $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+            }
+        });
     }
 };
 

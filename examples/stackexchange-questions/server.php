@@ -15,6 +15,7 @@ use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket;
+use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
@@ -66,18 +67,19 @@ $websocket = new class extends Websocket {
         return parent::onStop($server);
     }
 
-    protected function onHandshake(Request $request, Response $response): Response
+    protected function onHandshake(Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
         }
 
-        return $response;
+        return new Success($response);
     }
 
-    protected function onConnect(Client $client, Request $request): \Generator
+    protected function onConnect(Client $client, Request $request): ?Promise
     {
-        while (yield $client->receive()); // Ignore received messages
+        // Messages received on the connection are ignored.
+        return null;
     }
 };
 

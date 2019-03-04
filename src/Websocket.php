@@ -21,7 +21,6 @@ use Amp\Websocket\CompressionContextFactory;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
-use function Amp\call;
 use function Amp\Websocket\generateAcceptFromKey;
 
 abstract class Websocket implements RequestHandler, ServerObserver
@@ -44,12 +43,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /** @var Client[] */
     private $clients = [];
 
-    /** @var \Closure|null */
-    private $onHandshake;
-
-    /** @var \Closure|null */
-    private $onConnect;
-
     /**
      * @param Options|null                   $options
      * @param CompressionContextFactory|null $compressionFactory
@@ -68,36 +61,39 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Respond to websocket handshake requests.
      * If a websocket application doesn't wish to impose any special constraints on the
-     * handshake it doesn't have to do anything in this method and all handshakes will
-     * be automatically accepted.
-     * Return an instance of \Amp\Http\Server\Response to reject the websocket connection request.
+     * handshake it doesn't have to do anything in this method (other than return the
+     * given Response object) and all handshakes will be automatically accepted.
+     * This method provides an opportunity to set application-specific headers on the
+     * websocket response.
      *
      * @param Request  $request The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
-     * @return Response|Promise|\Generator Return the given response to accept the
-     *     connection or a new response object to deny the connection. May also return a
-     *     promise or generator to run as a coroutine.
+     * @return Promise<Response> Resolve with the given response to accept the connection
+     *     or resolve with a new Response object to deny the connection.
      */
-    abstract protected function onHandshake(Request $request, Response $response);
+    abstract protected function onHandshake(Request $request, Response $response): Promise;
 
     /**
-     * This method should handle messages received on the websocket connection. The connection is automatically
-     * closed when the promise (or coroutine) is resolved.
+     * This method is called when a new websocket connection is established on the endpoint.
+     * The method may handle all messages itself or pass the connection along to a separate
+     * handler if desired.
      *
      * ```
-     * while ($message = yield $client->receive()) {
-     *     $payload = yield $message->buffer();
-     *     yield $client->send('Message of length ' . \strlen($payload) . 'received');
-     * }
+     * return Amp\call(function () use ($client) {
+     *     while ($message = yield $client->receive()) {
+     *         $payload = yield $message->buffer();
+     *         yield $client->send('Message of length ' . \strlen($payload) . 'received');
+     *     }
+     * });
      * ```
      *
      * @param Client  $client The websocket client connection.
      * @param Request $request The HTTP request that instigated the connection.
      *
-     * @return Promise|\Generator Generators returned from this method are run as coroutines.
+     * @return Promise<null>|null
      */
-    abstract protected function onConnect(Client $client, Request $request);
+    abstract protected function onConnect(Client $client, Request $request): ?Promise;
 
     final public function handleRequest(Request $request): Promise
     {
@@ -181,7 +177,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             return $response;
         }
 
-        $response = yield call($this->onHandshake, $request, new Response(Status::SWITCHING_PROTOCOLS));
+        $response = yield $this->onHandshake($request, new Response(Status::SWITCHING_PROTOCOLS));
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
@@ -272,7 +268,10 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            yield call($this->onConnect, $client, $request);
+            $promise = $this->onConnect($client, $request);
+            if ($promise !== null) {
+                yield $promise;
+            }
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
@@ -398,9 +397,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        $this->onHandshake = \Closure::fromCallable([$this, 'onHandshake']);
-        $this->onConnect = \Closure::fromCallable([$this, 'onConnect']);
-
         return new Success;
     }
 
@@ -423,8 +419,6 @@ abstract class Websocket implements RequestHandler, ServerObserver
         foreach ($this->clients as $client) {
             $promises[] = $client->close($code, $reason);
         }
-
-        $this->onHandshake = $this->onConnect = null;
 
         return Promise\any($promises);
     }
