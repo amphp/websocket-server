@@ -88,12 +88,13 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * });
      * ```
      *
-     * @param Client  $client The websocket client connection.
-     * @param Request $request The HTTP request that instigated the connection.
+     * @param Client   $client The websocket client connection.
+     * @param Request  $request The HTTP request that instigated the connection.
+     * @param Response $response The HTTP response sent to client to accept the connection.
      *
      * @return Promise<null>|null
      */
-    abstract protected function onConnect(Client $client, Request $request): ?Promise;
+    abstract protected function onConnect(Client $client, Request $request, Response $response): ?Promise;
 
     final public function handleRequest(Request $request): Promise
     {
@@ -210,16 +211,16 @@ abstract class Websocket implements RequestHandler, ServerObserver
             }
         }
 
-        $response->upgrade(function (Socket $socket) use ($request, $compressionContext): void {
-            $this->reapClient($socket, $request, $compressionContext);
+        $response->upgrade(function (Socket $socket) use ($request, $response, $compressionContext): void {
+            $this->reapClient($socket, $request, $response, $compressionContext);
         });
 
         return $response;
     }
 
-    private function reapClient(Socket $socket, Request $request, ?CompressionContext $compressionContext): void
+    private function reapClient(Socket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
     {
-        $client = $this->clientFactory->createClient($request, $socket, $this->options, $compressionContext);
+        $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't seem to work...
         if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
@@ -237,10 +238,10 @@ abstract class Websocket implements RequestHandler, ServerObserver
         )) || true);
         // @formatter:on
 
-        Promise\rethrow(new Coroutine($this->runClient($client, $request)));
+        Promise\rethrow(new Coroutine($this->runClient($client, $request, $response)));
     }
 
-    private function runClient(Client $client, Request $request): \Generator
+    private function runClient(Client $client, Request $request, Response $response): \Generator
     {
         $id = $client->getId();
         $this->clients[$id] = $client;
@@ -270,7 +271,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            $promise = $this->onConnect($client, $request);
+            $promise = $this->onConnect($client, $request, $response);
             if ($promise !== null) {
                 yield $promise;
             }

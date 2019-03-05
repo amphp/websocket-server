@@ -3,6 +3,7 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Http\Server\Request;
+use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\CompressionContext;
@@ -13,6 +14,7 @@ final class Rfc6455ClientFactory implements ClientFactory
 {
     public function createClient(
         Request $request,
+        Response $response,
         Socket $socket,
         Options $options,
         ?CompressionContext $compressionContext = null

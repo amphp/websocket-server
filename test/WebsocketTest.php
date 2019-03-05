@@ -170,9 +170,9 @@ class WebsocketTest extends TestCase
                 return new Success($response);
             }
 
-            public function onConnect(Client $client, Request $request): ?Promise
+            public function onConnect(Client $client, Request $request, Response $response): ?Promise
             {
-                return call($this->onConnect, $this, $client, $request);
+                return call($this->onConnect, $this, $client, $request, $response);
             }
         };
 

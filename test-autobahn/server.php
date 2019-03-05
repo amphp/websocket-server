@@ -32,7 +32,7 @@ Amp\Loop::run(function () {
             return new Success($response);
         }
 
-        protected function onConnect(Client $client, Request $request): Promise
+        protected function onConnect(Client $client, Request $request, Response $response): Promise
         {
             return Amp\call(function () use ($client) {
                 while ($message = yield $client->receive()) {
