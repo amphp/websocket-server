@@ -183,7 +183,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
-                '%s::onHandshake() must return or resolve to an instance of %s, %s returned',
+                'The promise returned by %s::onHandshake() must resolve to an instance of %s, %s returned',
                 \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
                 Response::class,
                 \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)

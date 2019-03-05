@@ -3,21 +3,26 @@
 namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
+use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\Server;
+use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Status;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Promise;
 use Amp\Socket;
+use Amp\Socket\Server;
 use Amp\Success;
+use Amp\Websocket\Client;
+use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\Websocket;
 use League\Uri;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
+use function Amp\call;
 
 class WebsocketTest extends TestCase
 {
@@ -60,6 +65,16 @@ class WebsocketTest extends TestCase
         ];
 
         return new Request($this->createMock(HttpClient::class), "GET", Uri\Http::createFromString("/"), $headers);
+    }
+
+    public function writeRequest(Request $request): string
+    {
+        return \sprintf(
+            "%s %s HTTP/1.1\r\n%s\r\n",
+            $request->getMethod(),
+            $request->getUri()->getPath(),
+            Rfc7230::formatHeaders($request->getHeaders())
+        );
     }
 
     public function provideHandshakes(): array
@@ -125,8 +140,8 @@ class WebsocketTest extends TestCase
      */
     public function createMockWebsocket(): Websocket
     {
-        $server = new Server(
-            [$this->createMock(Socket\Server::class)],
+        $server = new HttpServer(
+            [$this->createMock(Server::class)],
             $this->createMock(RequestHandler::class),
             new NullLogger
         );
@@ -139,19 +154,126 @@ class WebsocketTest extends TestCase
         return $websocket;
     }
 
+    public function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
+    {
+        $websocket = new class($factory, $onConnect) extends Websocket {
+            private $onConnect;
+
+            public function __construct(ClientFactory $factory, callable $onConnect)
+            {
+                parent::__construct(null, null, $factory);
+                $this->onConnect = $onConnect;
+            }
+
+            public function onHandshake(Request $request, Response $response): Promise
+            {
+                return new Success($response);
+            }
+
+            public function onConnect(Client $client, Request $request): ?Promise
+            {
+                return call($this->onConnect, $this, $client, $request);
+            }
+        };
+
+        return new HttpServer(
+            [$server],
+            $websocket,
+            new NullLogger
+        );
+    }
+
     public function testInvalidOnHandshake(): void
     {
-        $this->expectException(\TypeError::class);
-        $this->expectExceptionMessage("onHandshake() must implement interface Amp\Promise, bool returned");
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage("onHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
 
         Loop::run(function () {
             $websocket = $this->createMockWebsocket();
 
             $websocket->expects($this->once())
                 ->method('onHandshake')
-                ->willReturn(false);
+                ->willReturn(new Success(false));
 
             $response = yield $websocket->handleRequest($this->createRequest());
         });
+    }
+
+    protected function execute(callable $onConnect, Client $client): void
+    {
+        Loop::run(function () use ($onConnect, $client) {
+            $factory = $this->createMock(ClientFactory::class);
+            $factory->method('createClient')
+                ->willReturn($client);
+
+            $server = Socket\listen("127.0.0.1:0");
+
+            $webserver = $this->createWebsocketServer(
+                $server,
+                $factory,
+                $onConnect
+            );
+
+            yield $webserver->start();
+
+            $socket = yield Socket\connect($server->getAddress());
+            \assert($socket instanceof Socket\ClientSocket);
+
+            $request = $this->createRequest();
+            yield $socket->write($this->writeRequest($request));
+
+            $response = yield $socket->read();
+
+            yield $webserver->stop();
+            $server->close();
+        });
+    }
+
+    public function testBroadcast(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->expects($this->once())
+            ->method('send')
+            ->with('Text');
+        $client->expects($this->once())
+            ->method('sendBinary')
+            ->with('Binary');
+
+        $this->execute(function (Websocket $websocket, Client $client) {
+            $websocket->broadcast('Text');
+            $websocket->broadcastBinary('Binary');
+        }, $client);
+    }
+
+    public function testBroadcastExcept(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->expects($this->never())
+            ->method('send')
+            ->with('Text');
+        $client->expects($this->never())
+            ->method('sendBinary')
+            ->with('Binary');
+
+        $this->execute(function (Websocket $websocket, Client $client) {
+            $websocket->broadcast('Text', [$client->getId()]);
+            $websocket->broadcastBinary('Binary', [$client->getId()]);
+        }, $client);
+    }
+
+    public function testMulticast(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->expects($this->once())
+            ->method('send')
+            ->with('Text');
+        $client->expects($this->once())
+            ->method('sendBinary')
+            ->with('Binary');
+
+        $this->execute(function (Websocket $websocket, Client $client) {
+            $websocket->multicast('Text', [$client->getId()]);
+            $websocket->multicastBinary('Binary', [$client->getId()]);
+        }, $client);
     }
 }
