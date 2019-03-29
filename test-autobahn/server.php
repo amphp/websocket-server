@@ -17,7 +17,7 @@ use Psr\Log\NullLogger;
 Amp\Loop::run(function () {
     /* --- http://localhost:9001/ ------------------------------------------------------------------- */
 
-    $options = (new Options)
+    $options = Options::createServerDefault()
         ->withBytesPerSecondLimit(\PHP_INT_MAX)
         ->withFrameSizeLimit(\PHP_INT_MAX)
         ->withFramesPerSecondLimit(\PHP_INT_MAX)

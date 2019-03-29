@@ -53,7 +53,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         ?CompressionContextFactory $compressionFactory = null,
         ?ClientFactory $clientFactory = null
     ) {
-        $this->options = $options ?? new Options;
+        $this->options = $options ?? Options::createServerDefault();
         $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
         $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
     }
