@@ -29,13 +29,13 @@
         "php": ">=7.1",
         "amphp/amp": "^2.0.3",
         "amphp/byte-stream": "^1.5",
-        "amphp/http": "^1",
-        "amphp/http-server": "^1 || ^0.8",
-        "amphp/socket": "^0.10.5",
-        "amphp/websocket": "dev-master"
+        "amphp/http": "^1.2",
+        "amphp/http-server": "v2.x-dev as 1.0",
+        "amphp/socket": "dev-master as 1.0",
+        "amphp/websocket": "socket-1.0-dev as 1.0"
     },
     "require-dev": {
-        "amphp/artax": "^3",
+        "amphp/http-client": "dev-master as 4.0",
         "amphp/http-server-static-content": "^1",
         "amphp/http-server-router": "^1",
         "amphp/log": "^1",

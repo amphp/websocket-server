@@ -141,7 +141,7 @@ class WebsocketTest extends TestCase
     public function createMockWebsocket(): Websocket
     {
         $server = new HttpServer(
-            [$this->createMock(Server::class)],
+            [Socket\listen('127.0.0.1:0')],
             $this->createMock(RequestHandler::class),
             new NullLogger
         );
@@ -217,7 +217,7 @@ class WebsocketTest extends TestCase
             yield $webserver->start();
 
             $socket = yield Socket\connect($server->getAddress());
-            \assert($socket instanceof Socket\ClientSocket);
+            \assert($socket instanceof Socket\EncryptableSocket);
 
             $request = $this->createRequest();
             yield $socket->write($this->writeRequest($request));

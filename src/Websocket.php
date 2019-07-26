@@ -11,6 +11,7 @@ use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use Amp\Promise;
+use Amp\Socket\ResourceSocket;
 use Amp\Socket\Socket;
 use Amp\Success;
 use Amp\Websocket\Client;
@@ -223,7 +224,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't seem to work...
-        if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
+        if ($socket instanceof ResourceSocket && \function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
             $sock = \socket_import_stream($socket->getResource());
             /** @noinspection PhpComposerExtensionStubsInspection */
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
