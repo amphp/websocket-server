@@ -120,7 +120,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
 
     private function respond(Request $request): \Generator
     {
-        /** @var \Amp\Http\Server\Response $response */
+        /** @var Response $response */
         if ($request->getMethod() !== 'GET') {
             $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
             $response->setHeader('allow', 'GET');
@@ -290,7 +290,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return \Amp\Promise<int>
+     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
+     *     generally undesirable to yield this promise in a coroutine.
      */
     final public function broadcast(string $data, array $exceptIds = []): Promise
     {
@@ -327,7 +328,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return \Amp\Promise<int>
+     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
+     *     generally undesirable to yield this promise in a coroutine.
      */
     final public function broadcastBinary(string $data, array $exceptIds = []): Promise
     {
@@ -340,7 +342,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return \Amp\Promise<int>
+     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
+     *     generally undesirable to yield this promise in a coroutine.
      */
     final public function multicast(string $data, array $clientIds): Promise
     {
@@ -366,7 +369,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return \Amp\Promise<int>
+     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
+     *     generally undesirable to yield this promise in a coroutine.
      */
     final public function multicastBinary(string $data, array $clientIds): Promise
     {
