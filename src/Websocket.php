@@ -212,14 +212,14 @@ abstract class Websocket implements RequestHandler, ServerObserver
             }
         }
 
-        $response->upgrade(function (Socket $socket) use ($request, $response, $compressionContext): void {
-            $this->reapClient($socket, $request, $response, $compressionContext);
+        $response->upgrade(function (Socket $socket) use ($request, $response, $compressionContext): Promise {
+            return $this->reapClient($socket, $request, $response, $compressionContext);
         });
 
         return $response;
     }
 
-    private function reapClient(Socket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
+    private function reapClient(Socket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): Promise
     {
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
@@ -239,7 +239,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         )) || true);
         // @formatter:on
 
-        Promise\rethrow(new Coroutine($this->runClient($client, $request, $response)));
+        return new Coroutine($this->runClient($client, $request, $response));
     }
 
     private function runClient(Client $client, Request $request, Response $response): \Generator
