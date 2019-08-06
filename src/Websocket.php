@@ -287,8 +287,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
      *
-     * @param string   $data Data to send.
-     * @param string[] $exceptIds List of IDs to exclude from the broadcast.
+     * @param string $data Data to send.
+     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
@@ -324,8 +324,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a binary message to all clients (except those given in the optional array).
      *
-     * @param string   $data Data to send.
-     * @param string[] $exceptIds List of IDs to exclude from the broadcast.
+     * @param string $data Data to send.
+     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return \Amp\Promise<int>
      */
@@ -337,8 +337,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a UTF-8 text message to a set of clients.
      *
-     * @param string   $data Data to send.
-     * @param string[] $clientIds Array of client IDs.
+     * @param string $data Data to send.
+     * @param int[]  $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
@@ -363,8 +363,8 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * Send a binary message to a set of clients.
      *
-     * @param string   $data Data to send.
-     * @param string[] $clientIds Array of client IDs.
+     * @param string $data Data to send.
+     * @param int[]  $clientIds Array of client IDs.
      *
      * @return \Amp\Promise<int>
      */
