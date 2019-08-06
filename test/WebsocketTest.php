@@ -10,8 +10,7 @@ use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Status;
-use Amp\Loop;
-use Amp\PHPUnit\TestCase;
+use Amp\PHPUnit\AsyncTestCase;
 use Amp\Promise;
 use Amp\Socket;
 use Amp\Socket\Server;
@@ -24,7 +23,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
 use function Amp\call;
 
-class WebsocketTest extends TestCase
+class WebsocketTest extends AsyncTestCase
 {
     /**
      * @param Request $request Request initiating the handshake.
@@ -33,25 +32,23 @@ class WebsocketTest extends TestCase
      *
      * @dataProvider provideHandshakes
      */
-    public function testHandshake(Request $request, int $status, array $expectedHeaders = []): void
+    public function testHandshake(Request $request, int $status, array $expectedHeaders = []): \Generator
     {
-        Loop::run(function () use ($request, $status, $expectedHeaders) {
-            $websocket = $this->createMockWebsocket();
+        $websocket = $this->createMockWebsocket();
 
-            $websocket->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
-                ->method('onHandshake')
-                ->willReturnCallback(function (Request $request, Response $response): Promise {
-                    return new Success($response);
-                });
+        $websocket->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
+            ->method('onHandshake')
+            ->willReturnCallback(function (Request $request, Response $response): Promise {
+                return new Success($response);
+            });
 
-            /** @var Response $response */
-            $response = yield $websocket->handleRequest($request);
-            $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
+        /** @var Response $response */
+        $response = yield $websocket->handleRequest($request);
+        $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
 
-            if ($status === Status::SWITCHING_PROTOCOLS) {
-                $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
-            }
-        });
+        if ($status === Status::SWITCHING_PROTOCOLS) {
+            $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
+        }
     }
 
     public function createRequest(): Request
@@ -80,14 +77,6 @@ class WebsocketTest extends TestCase
     public function provideHandshakes(): array
     {
         $testCases = [];
-
-        $headers = [
-            "host" => ["localhost"],
-            "sec-websocket-key" => ["x3JJHMbDL1EzLkh9GBhXDw=="],
-            "sec-websocket-version" => ["13"],
-            "upgrade" => ["websocket"],
-            "connection" => ["upgrade"],
-        ];
 
         // 0 ----- valid Handshake request -------------------------------------------------------->
         $request = $this->createRequest();
@@ -183,55 +172,53 @@ class WebsocketTest extends TestCase
         );
     }
 
-    public function testInvalidOnHandshake(): void
+    public function testInvalidOnHandshake(): \Generator
     {
         $this->expectException(\Error::class);
         $this->expectExceptionMessage("onHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
 
-        Loop::run(function () {
-            $websocket = $this->createMockWebsocket();
+        $websocket = $this->createMockWebsocket();
 
-            $websocket->expects($this->once())
-                ->method('onHandshake')
-                ->willReturn(new Success(false));
+        $websocket->expects($this->once())
+            ->method('onHandshake')
+            ->willReturn(new Success(false));
 
-            $response = yield $websocket->handleRequest($this->createRequest());
-        });
+        $response = yield $websocket->handleRequest($this->createRequest());
     }
 
-    protected function execute(callable $onConnect, Client $client): void
+    protected function execute(callable $onConnect, Client $client): \Generator
     {
-        Loop::run(function () use ($onConnect, $client) {
-            $factory = $this->createMock(ClientFactory::class);
-            $factory->method('createClient')
-                ->willReturn($client);
+        $factory = $this->createMock(ClientFactory::class);
+        $factory->method('createClient')
+            ->willReturn($client);
 
-            $server = Socket\listen("127.0.0.1:0");
+        $server = Server::listen("127.0.0.1:0");
 
-            $webserver = $this->createWebsocketServer(
-                $server,
-                $factory,
-                $onConnect
-            );
+        $webserver = $this->createWebsocketServer(
+            $server,
+            $factory,
+            $onConnect
+        );
 
-            yield $webserver->start();
+        yield $webserver->start();
 
-            $socket = yield Socket\connect($server->getAddress());
-            \assert($socket instanceof Socket\EncryptableSocket);
+        $socket = yield Socket\connect($server->getAddress()->toString());
+        \assert($socket instanceof Socket\EncryptableSocket);
 
-            $request = $this->createRequest();
-            yield $socket->write($this->writeRequest($request));
+        $request = $this->createRequest();
+        yield $socket->write($this->writeRequest($request));
 
-            $response = yield $socket->read();
+        $response = yield $socket->read();
 
-            yield $webserver->stop();
-            $server->close();
-        });
+        yield $webserver->stop();
+        $server->close();
     }
 
-    public function testBroadcast(): void
+    public function testBroadcast(): \Generator
     {
         $client = $this->createMock(Client::class);
+        $client->method('getRemoteAddress')
+            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
             ->with('Text');
@@ -239,15 +226,17 @@ class WebsocketTest extends TestCase
             ->method('sendBinary')
             ->with('Binary');
 
-        $this->execute(function (Websocket $websocket, Client $client) {
+        return $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->broadcast('Text');
             $websocket->broadcastBinary('Binary');
         }, $client);
     }
 
-    public function testBroadcastExcept(): void
+    public function testBroadcastExcept(): \Generator
     {
         $client = $this->createMock(Client::class);
+        $client->method('getRemoteAddress')
+            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->never())
             ->method('send')
             ->with('Text');
@@ -255,15 +244,17 @@ class WebsocketTest extends TestCase
             ->method('sendBinary')
             ->with('Binary');
 
-        $this->execute(function (Websocket $websocket, Client $client) {
+        return $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->broadcast('Text', [$client->getId()]);
             $websocket->broadcastBinary('Binary', [$client->getId()]);
         }, $client);
     }
 
-    public function testMulticast(): void
+    public function testMulticast(): \Generator
     {
         $client = $this->createMock(Client::class);
+        $client->method('getRemoteAddress')
+            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
             ->with('Text');
@@ -271,7 +262,7 @@ class WebsocketTest extends TestCase
             ->method('sendBinary')
             ->with('Binary');
 
-        $this->execute(function (Websocket $websocket, Client $client) {
+        return $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->multicast('Text', [$client->getId()]);
             $websocket->multicastBinary('Binary', [$client->getId()]);
         }, $client);
