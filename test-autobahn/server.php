@@ -4,9 +4,9 @@ require \dirname(__DIR__) . "/vendor/autoload.php";
 
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\Server;
+use Amp\Http\Server\Server as HttpServer;
 use Amp\Promise;
-use Amp\Socket;
+use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
@@ -47,6 +47,6 @@ Amp\Loop::run(function () {
         }
     };
 
-    $server = new Server([Socket\listen("127.0.0.1:9001")], $websocket, new NullLogger);
+    $server = new HttpServer([SocketServer::listen("127.0.0.1:9001")], $websocket, new NullLogger);
     return $server->start();
 });

@@ -6,13 +6,13 @@
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
-use Amp\Http\Server\Server;
+use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
-use Amp\Socket;
+use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
@@ -44,8 +44,8 @@ $websocket = new class extends Websocket {
 };
 
 $sockets = [
-    Socket\listen('127.0.0.1:1337'),
-    Socket\listen('[::1]:1337'),
+    SocketServer::listen('127.0.0.1:1337'),
+    SocketServer::listen('[::1]:1337'),
 ];
 
 $router = new Router;
@@ -57,7 +57,7 @@ $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
 
-$server = new Server($sockets, $router, $logger);
+$server = new HttpServer($sockets, $router, $logger);
 
 Loop::run(function () use ($server) {
     yield $server->start();

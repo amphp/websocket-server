@@ -3,18 +3,18 @@
 // Note that this example requires amphp/artax, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
-use Amp\Artax\Client as HttpClient;
-use Amp\Artax\DefaultClient;
+use Amp\Http\Client\Client as HttpClient;
+use Amp\Http\Client\Request as ClientRequest;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
-use Amp\Http\Server\Server;
+use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
-use Amp\Socket;
+use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\Websocket;
@@ -33,14 +33,16 @@ $websocket = new class extends Websocket {
     /** @var int|null */
     private $newestQuestion;
 
-    public function onStart(Server $server): Promise
+    public function onStart(HttpServer $server): Promise
     {
         $promise = parent::onStart($server);
 
-        $this->http = new DefaultClient;
+        $this->http = new HttpClient;
         $this->watcher = Loop::repeat(10000, function () {
             /** @var Response $response */
-            $response = yield $this->http->request('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow');
+            $response = yield $this->http->request(
+                new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
+            );
             $json = yield $response->getBody();
 
             $data = \json_decode($json, true);
@@ -60,7 +62,7 @@ $websocket = new class extends Websocket {
         return $promise;
     }
 
-    public function onStop(Server $server): Promise
+    public function onStop(HttpServer $server): Promise
     {
         Loop::cancel($this->watcher);
 
@@ -84,8 +86,8 @@ $websocket = new class extends Websocket {
 };
 
 $sockets = [
-    Socket\listen('127.0.0.1:1337'),
-    Socket\listen('[::1]:1337'),
+    SocketServer::listen('127.0.0.1:1337'),
+    SocketServer::listen('[::1]:1337'),
 ];
 
 $router = new Router;
@@ -97,7 +99,7 @@ $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
 
-$server = new Server($sockets, $router, $logger);
+$server = new HttpServer($sockets, $router, $logger);
 
 Loop::run(function () use ($server) {
     yield $server->start();
