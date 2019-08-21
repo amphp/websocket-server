@@ -30,12 +30,12 @@
         "amphp/amp": "^2.0.3",
         "amphp/byte-stream": "^1.5",
         "amphp/http": "^1.2",
-        "amphp/http-server": "v2.x-dev as 1.0",
-        "amphp/socket": "dev-master as 1.0",
-        "amphp/websocket": "socket-1.0-dev as 1.0"
+        "amphp/http-server": "^2",
+        "amphp/socket": "^1",
+        "amphp/websocket": "^1"
     },
     "require-dev": {
-        "amphp/http-client": "dev-master as 4.0",
+        "amphp/http-client": "^4",
         "amphp/http-server-static-content": "^1",
         "amphp/http-server-router": "^1.0.1",
         "amphp/log": "^1",
@@ -46,6 +46,7 @@
         "phpunit/phpunit": "^7",
         "infection/infection": "^0.9.3"
     },
+    "minimum-stability": "rc",
     "suggest": {
         "ext-zlib": "Required for compression"
     },
