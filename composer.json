@@ -27,26 +27,26 @@
     ],
     "require": {
         "php": ">=7.1",
-        "amphp/amp": "^2.0.3",
-        "amphp/byte-stream": "^1.5",
-        "amphp/http": "^1.2",
+        "amphp/amp": "^2.2",
+        "amphp/byte-stream": "^1.6.1",
+        "amphp/http": "^1.3",
         "amphp/http-server": "^2",
         "amphp/socket": "^1",
         "amphp/websocket": "^1"
     },
     "require-dev": {
         "amphp/http-client": "^4",
-        "amphp/http-server-static-content": "^1",
-        "amphp/http-server-router": "^1.0.1",
+        "amphp/http-server-static-content": "^1.0.4",
+        "amphp/http-server-router": "^1.0.2",
         "amphp/log": "^1",
         "amphp/php-cs-fixer-config": "dev-master",
         "amphp/phpunit-util": "^1.1",
         "league/climate": "^3",
         "league/uri-schemes": "^1.1",
-        "phpunit/phpunit": "^7",
+        "phpunit/phpunit": "^8 || ^7",
         "infection/infection": "^0.9.3"
     },
-    "minimum-stability": "rc",
+    "minimum-stability": "RC",
     "suggest": {
         "ext-zlib": "Required for compression"
     },
