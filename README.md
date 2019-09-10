@@ -17,7 +17,6 @@ composer require amphp/websocket-server
 The documentation for this library is currently a work in progress. Pull Requests to improve the documentation 
 are always welcome!
 
-
 ## Requirements
 
 - PHP 7.0+
@@ -40,8 +39,10 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
-use Amp\Promise;use Amp\Socket;
-use Amp\Success;use Amp\Websocket\Client;
+use Amp\Promise;
+use Amp\Socket;
+use Amp\Success;
+use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
