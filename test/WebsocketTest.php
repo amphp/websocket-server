@@ -159,7 +159,7 @@ class WebsocketTest extends AsyncTestCase
                 return new Success($response);
             }
 
-            public function onConnect(Client $client, Request $request, Response $response): ?Promise
+            public function onConnection(Client $client, Request $request, Response $response): ?Promise
             {
                 return call($this->onConnect, $this, $client, $request, $response);
             }

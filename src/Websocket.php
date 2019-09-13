@@ -95,7 +95,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      *
      * @return Promise<null>|null
      */
-    abstract protected function onConnect(Client $client, Request $request, Response $response): ?Promise;
+    abstract protected function onConnection(Client $client, Request $request, Response $response): ?Promise;
 
     final public function handleRequest(Request $request): Promise
     {
@@ -272,7 +272,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            $promise = $this->onConnect($client, $request, $response);
+            $promise = $this->onConnection($client, $request, $response);
             if ($promise !== null) {
                 yield $promise;
             }

@@ -78,7 +78,7 @@ $websocket = new class extends Websocket {
         return new Success($response);
     }
 
-    protected function onConnect(Client $client, Request $request, Response $response): ?Promise
+    protected function onConnection(Client $client, Request $request, Response $response): ?Promise
     {
         // Messages received on the connection are ignored.
         return null;
