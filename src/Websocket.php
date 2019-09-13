@@ -93,9 +93,9 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @param Request  $request The HTTP request that instigated the connection.
      * @param Response $response The HTTP response sent to client to accept the connection.
      *
-     * @return Promise<null>|null
+     * @return Promise<null>
      */
-    abstract protected function onConnection(Client $client, Request $request, Response $response): ?Promise;
+    abstract protected function onConnection(Client $client, Request $request, Response $response): Promise;
 
     final public function handleRequest(Request $request): Promise
     {
@@ -272,15 +272,17 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            $promise = $this->onConnection($client, $request, $response);
-            if ($promise !== null) {
-                yield $promise;
-            }
+            yield $this->onConnection($client, $request, $response);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);
             $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+            return;
+        }
+
+        if ($client->isConnected()) {
+            $client->close(Code::NORMAL_CLOSE, 'Closing connection');
         }
     }
 

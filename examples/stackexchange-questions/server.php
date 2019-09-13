@@ -20,6 +20,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
+use function Amp\call;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
@@ -78,10 +79,13 @@ $websocket = new class extends Websocket {
         return new Success($response);
     }
 
-    protected function onConnection(Client $client, Request $request, Response $response): ?Promise
+    protected function onConnection(Client $client, Request $request, Response $response): Promise
     {
-        // Messages received on the connection are ignored.
-        return null;
+        return call(function () use ($client) {
+            while ($message = yield $client->receive()) {
+                // Messages received on the connection are ignored and discarded.
+            }
+        });
     }
 };
 
