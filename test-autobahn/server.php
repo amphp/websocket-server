@@ -27,12 +27,12 @@ Amp\Loop::run(function () {
     // @formatter:off
     $websocket = new class($options) extends Websocket {
         // @formatter:on
-        protected function onHandshake(Request $request, Response $response): Promise
+        protected function handleHandshake(Request $request, Response $response): Promise
         {
             return new Success($response);
         }
 
-        protected function onConnect(Client $client, Request $request, Response $response): Promise
+        protected function handleClient(Client $client, Request $request, Response $response): Promise
         {
             return Amp\call(function () use ($client) {
                 while ($message = yield $client->receive()) {

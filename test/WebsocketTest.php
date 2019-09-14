@@ -37,7 +37,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket = $this->createMockWebsocket();
 
         $websocket->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
-            ->method('onHandshake')
+            ->method('handleHandshake')
             ->willReturnCallback(function (Request $request, Response $response): Promise {
                 return new Success($response);
             });
@@ -154,12 +154,12 @@ class WebsocketTest extends AsyncTestCase
                 $this->onConnect = $onConnect;
             }
 
-            public function onHandshake(Request $request, Response $response): Promise
+            public function handleHandshake(Request $request, Response $response): Promise
             {
                 return new Success($response);
             }
 
-            public function onConnection(Client $client, Request $request, Response $response): Promise
+            public function handleClient(Client $client, Request $request, Response $response): Promise
             {
                 return call($this->onConnect, $this, $client, $request, $response);
             }
@@ -175,12 +175,12 @@ class WebsocketTest extends AsyncTestCase
     public function testInvalidOnHandshake(): \Generator
     {
         $this->expectException(\Error::class);
-        $this->expectExceptionMessage("onHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
+        $this->expectExceptionMessage("handleHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
 
         $websocket = $this->createMockWebsocket();
 
         $websocket->expects($this->once())
-            ->method('onHandshake')
+            ->method('handleHandshake')
             ->willReturn(new Success(false));
 
         $response = yield $websocket->handleRequest($this->createRequest());

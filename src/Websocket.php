@@ -73,7 +73,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise<Response> Resolve with the given response to accept the connection
      *     or resolve with a new Response object to deny the connection.
      */
-    abstract protected function onHandshake(Request $request, Response $response): Promise;
+    abstract protected function handleHandshake(Request $request, Response $response): Promise;
 
     /**
      * This method is called when a new websocket connection is established on the endpoint.
@@ -95,7 +95,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      *
      * @return Promise<null>
      */
-    abstract protected function onConnection(Client $client, Request $request, Response $response): Promise;
+    abstract protected function handleClient(Client $client, Request $request, Response $response): Promise;
 
     final public function handleRequest(Request $request): Promise
     {
@@ -181,11 +181,11 @@ abstract class Websocket implements RequestHandler, ServerObserver
             return $response;
         }
 
-        $response = yield $this->onHandshake($request, new Response(Status::SWITCHING_PROTOCOLS));
+        $response = yield $this->handleHandshake($request, new Response(Status::SWITCHING_PROTOCOLS));
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
-                'The promise returned by %s::onHandshake() must resolve to an instance of %s, %s returned',
+                'The promise returned by %s::handleHandshake() must resolve to an instance of %s, %s returned',
                 \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
                 Response::class,
                 \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
@@ -272,7 +272,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            yield $this->onConnection($client, $request, $response);
+            yield $this->handleClient($client, $request, $response);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {

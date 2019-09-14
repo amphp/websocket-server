@@ -23,7 +23,7 @@ use function Amp\ByteStream\getStdout;
 require __DIR__ . '/../../vendor/autoload.php';
 
 $websocket = new class extends Websocket {
-    protected function onHandshake(Request $request, Response $response): Promise
+    protected function handleHandshake(Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
@@ -32,7 +32,7 @@ $websocket = new class extends Websocket {
         return new Success($response);
     }
 
-    protected function onConnection(Client $client, Request $request, Response $response): Promise
+    protected function handleClient(Client $client, Request $request, Response $response): Promise
     {
         return Amp\call(function () use ($client) {
             while ($message = yield $client->receive()) {
