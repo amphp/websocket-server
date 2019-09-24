@@ -10,7 +10,8 @@ This package can be installed as a [Composer] dependency.
 composer require amphp/websocket-server
 ```
 
-> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC releases
+> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you 
+> have any feedback.
 
 ## Documentation
 
@@ -19,7 +20,7 @@ are always welcome!
 
 ## Requirements
 
-- PHP 7.0+
+- PHP 7.1+
 
 ## Example
 
@@ -52,7 +53,7 @@ use function Amp\call;
 require __DIR__ . '/vendor/autoload.php';
 
 $websocket = new class extends Websocket {
-    public function onHandshake(Request $request, Response $response): Promise
+    public function handleHandshake(Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
             $response->setStatus(403);
@@ -61,7 +62,7 @@ $websocket = new class extends Websocket {
         return new Success($response);
     }
 
-    public function onConnect(Client $client, Request $request, Response $response): Promise
+    public function handleClient(Client $client, Request $request, Response $response): Promise
     {
         return call(function() use($client) {
             while ($message = yield $client->receive()) {
