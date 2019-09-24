@@ -10,8 +10,7 @@ This package can be installed as a [Composer] dependency.
 composer require amphp/websocket-server
 ```
 
-> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you 
-> have any feedback.
+> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you have any feedback.
 
 ## Documentation
 
@@ -28,7 +27,7 @@ are always welcome!
 <?php
 
 // Note that this example requires:
-// amphp/http-server-router,
+// amphp/http-server-router
 // amphp/http-server-static-content
 // amphp/log
 
