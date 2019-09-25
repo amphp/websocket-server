@@ -3,6 +3,7 @@
 namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
+use Amp\Deferred;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\Request;
@@ -21,6 +22,7 @@ use Amp\Websocket\Server\Websocket;
 use League\Uri;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
+use function Amp\asyncCall;
 use function Amp\call;
 
 class WebsocketTest extends AsyncTestCase
@@ -130,7 +132,7 @@ class WebsocketTest extends AsyncTestCase
     public function createMockWebsocket(): Websocket
     {
         $server = new HttpServer(
-            [Socket\listen('127.0.0.1:0')],
+            [Server::listen('127.0.0.1:0')],
             $this->createMock(RequestHandler::class),
             new NullLogger
         );
@@ -161,7 +163,7 @@ class WebsocketTest extends AsyncTestCase
 
             public function handleClient(Client $client, Request $request, Response $response): Promise
             {
-                return call($this->onConnect, $this, $client, $request, $response);
+                return call($this->onConnect, $this, $client);
             }
         };
 
@@ -188,16 +190,27 @@ class WebsocketTest extends AsyncTestCase
 
     protected function execute(callable $onConnect, Client $client): \Generator
     {
+        \assert($client instanceof MockObject);
+
+        $client->method('close')
+            ->willReturn(new Success);
+
         $factory = $this->createMock(ClientFactory::class);
         $factory->method('createClient')
             ->willReturn($client);
 
         $server = Server::listen("127.0.0.1:0");
 
+        $deferred = new Deferred;
+
         $webserver = $this->createWebsocketServer(
             $server,
             $factory,
-            $onConnect
+            function (Websocket $websocket, Client $client) use ($onConnect, $deferred): Promise {
+                $promise = call($onConnect, $websocket, $client);
+                $deferred->resolve($promise);
+                return $promise;
+            }
         );
 
         yield $webserver->start();
@@ -208,10 +221,16 @@ class WebsocketTest extends AsyncTestCase
         $request = $this->createRequest();
         yield $socket->write($this->writeRequest($request));
 
-        $response = yield $socket->read();
+        asyncCall(function () use ($socket): \Generator {
+            while (null !== yield $socket->read());
+        });
 
-        yield $webserver->stop();
-        $server->close();
+        try {
+            yield $deferred->promise();
+        } finally {
+            yield $webserver->stop();
+            $socket->close();
+        }
     }
 
     public function testBroadcast(): \Generator
