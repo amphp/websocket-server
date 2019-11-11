@@ -19,8 +19,8 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\Websocket;
-use League\Uri;
 use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
 use function Amp\asyncCall;
 use function Amp\call;
@@ -63,7 +63,11 @@ class WebsocketTest extends AsyncTestCase
             "connection" => ["upgrade"],
         ];
 
-        return new Request($this->createMock(HttpClient::class), "GET", Uri\Http::createFromString("/"), $headers);
+        $uri = $this->createMock(PsrUri::class);
+        $uri->method('getPath')
+            ->willReturn('/');
+
+        return new Request($this->createMock(HttpClient::class), "GET", $uri, $headers);
     }
 
     public function writeRequest(Request $request): string
