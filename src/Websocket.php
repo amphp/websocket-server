@@ -3,6 +3,7 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Coroutine;
+use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
@@ -11,9 +12,6 @@ use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use Amp\Promise;
-use Amp\Socket\ResourceSocket;
-use Amp\Socket\Socket;
-use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
@@ -24,8 +22,11 @@ use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\Websocket\generateAcceptFromKey;
 
-abstract class Websocket implements RequestHandler, ServerObserver
+final class Websocket implements RequestHandler, ServerObserver
 {
+    /** @var ClientHandler */
+    private $clientHandler;
+
     /** @var PsrLogger */
     private $logger;
 
@@ -45,80 +46,29 @@ abstract class Websocket implements RequestHandler, ServerObserver
     private $clients = [];
 
     /**
+     * @param ClientHandler                  $clientHandler
      * @param Options|null                   $options
      * @param CompressionContextFactory|null $compressionFactory
      * @param ClientFactory|null             $clientFactory
      */
     public function __construct(
+        ClientHandler $clientHandler,
         ?Options $options = null,
         ?CompressionContextFactory $compressionFactory = null,
         ?ClientFactory $clientFactory = null
     ) {
+        $this->clientHandler = $clientHandler;
         $this->options = $options ?? Options::createServerDefault();
         $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
         $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
     }
 
-    /**
-     * Respond to websocket handshake requests.
-     *
-     * If a websocket application doesn't wish to impose any special constraints on the
-     * handshake it doesn't have to do anything in this method (other than return the
-     * given Response object) and all handshakes will be automatically accepted.
-     *
-     * This method provides an opportunity to set application-specific headers, including
-     * cookies, on the websocket response. Although any non-101 status code can be used
-     * to reject the websocket connection it is generally recommended to use a 4xx status
-     * code that is descriptive of why the handshake was rejected.
-     *
-     * @param Request  $request The HTTP request that instigated the handshake
-     * @param Response $response The switching protocol response for adding headers, etc.
-     *
-     * @return Promise<Response> Resolve the Promise with a Response set to a status code
-     *                           other than {@link Status::SWITCHING_PROTOCOLS} to deny the
-     *                           handshake Request.
-     */
-    abstract protected function handleHandshake(Request $request, Response $response): Promise;
-
-    /**
-     * This method is called when a new websocket connection is established on the endpoint.
-     * The method may handle all messages itself or pass the connection along to a separate
-     * handler if desired.
-     *
-     * ```
-     * return Amp\call(function () use ($client) {
-     *     while ($message = yield $client->receive()) {
-     *         $payload = yield $message->buffer();
-     *         yield $client->send('Message of length ' . \strlen($payload) . 'received');
-     *     }
-     * });
-     * ```
-     *
-     * @param Client   $client The websocket client connection.
-     * @param Request  $request The HTTP request that instigated the connection.
-     * @param Response $response The HTTP response sent to client to accept the connection.
-     *
-     * @return Promise<null>
-     */
-    abstract protected function handleClient(Client $client, Request $request, Response $response): Promise;
-
-    final public function handleRequest(Request $request): Promise
+    public function handleRequest(Request $request): Promise
     {
-        if ($this->options === null) {
-            throw new \Error(\sprintf(
-                "Can't handle WebSocket handshake, because %s::__construct() overrides %s::__construct() and didn't call its parent method.",
-                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
-                self::class
-            ));
-        }
-
-        if ($this->logger === null) {
-            throw new \Error(\sprintf(
-                "Can't handle WebSocket handshake, because %s::onStart() overrides %s::onStart() and didn't call its parent method.",
-                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
-                self::class
-            ));
-        }
+        \assert($this->logger !== null, \sprintf(
+            "Can't handle WebSocket handshake because %s::onStart() was not called by the server",
+            self::class
+        ));
 
         return new Coroutine($this->respond($request));
     }
@@ -186,7 +136,13 @@ abstract class Websocket implements RequestHandler, ServerObserver
             return $response;
         }
 
-        $response = yield $this->handleHandshake($request, new Response(Status::SWITCHING_PROTOCOLS));
+        $response = new Response(Status::SWITCHING_PROTOCOLS, [
+            'connection' => 'upgrade',
+            'upgrade' => 'websocket',
+            'sec-websocket-accept' => generateAcceptFromKey($acceptKey),
+        ]);
+
+        $response = yield $this->clientHandler->handleHandshake($request, $response);
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
@@ -198,12 +154,11 @@ abstract class Websocket implements RequestHandler, ServerObserver
         }
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
+            $response->removeHeader('connection');
+            $response->removeHeader('upgrade');
+            $response->removeHeader('sec-websocket-accept');
             return $response;
         }
-
-        $response->setHeader('connection', 'upgrade');
-        $response->setHeader('upgrade', 'websocket');
-        $response->setHeader('sec-websocket-accept', generateAcceptFromKey($acceptKey));
 
         $compressionContext = null;
         if ($this->options->isCompressionEnabled()) {
@@ -217,19 +172,19 @@ abstract class Websocket implements RequestHandler, ServerObserver
             }
         }
 
-        $response->upgrade(function (Socket $socket) use ($request, $response, $compressionContext): Promise {
+        $response->upgrade(function (UpgradedSocket $socket) use ($request, $response, $compressionContext): Promise {
             return $this->reapClient($socket, $request, $response, $compressionContext);
         });
 
         return $response;
     }
 
-    private function reapClient(Socket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): Promise
+    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): Promise
     {
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't seem to work...
-        if ($socket instanceof ResourceSocket && \function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
+        if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
             $sock = \socket_import_stream($socket->getResource());
             /** @noinspection PhpComposerExtensionStubsInspection */
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
@@ -277,7 +232,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            yield $this->handleClient($client, $request, $response);
+            yield $this->clientHandler->handleClient($client, $request, $response);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
@@ -300,7 +255,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
      *     generally undesirable to yield this promise in a coroutine.
      */
-    final public function broadcast(string $data, array $exceptIds = []): Promise
+    public function broadcast(string $data, array $exceptIds = []): Promise
     {
         return $this->broadcastData($data, false, $exceptIds);
     }
@@ -338,7 +293,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
      *     generally undesirable to yield this promise in a coroutine.
      */
-    final public function broadcastBinary(string $data, array $exceptIds = []): Promise
+    public function broadcastBinary(string $data, array $exceptIds = []): Promise
     {
         return $this->broadcastData($data, true, $exceptIds);
     }
@@ -352,7 +307,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
      *     generally undesirable to yield this promise in a coroutine.
      */
-    final public function multicast(string $data, array $clientIds): Promise
+    public function multicast(string $data, array $clientIds): Promise
     {
         return $this->multicastData($data, false, $clientIds);
     }
@@ -379,7 +334,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
      * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
      *     generally undesirable to yield this promise in a coroutine.
      */
-    final public function multicastBinary(string $data, array $clientIds): Promise
+    public function multicastBinary(string $data, array $clientIds): Promise
     {
         return $this->multicastData($data, true, $clientIds);
     }
@@ -387,9 +342,25 @@ abstract class Websocket implements RequestHandler, ServerObserver
     /**
      * @return Client[] Array of Client objects currently connected to this endpoint indexed by their IDs.
      */
-    final public function getClients(): array
+    public function getClients(): array
     {
         return $this->clients;
+    }
+
+    /**
+     * @return PsrLogger Server logger.
+     */
+    public function getLogger(): PsrLogger
+    {
+        return $this->logger;
+    }
+
+    /**
+     * @return Options
+     */
+    public function getOptions(): Options
+    {
+        return $this->options;
     }
 
     /**
@@ -412,7 +383,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return new Success;
+        return $this->clientHandler->onStart($this);
     }
 
     /**
@@ -430,7 +401,7 @@ abstract class Websocket implements RequestHandler, ServerObserver
         $code = Code::GOING_AWAY;
         $reason = 'Server shutting down!';
 
-        $promises = [];
+        $promises = [$this->clientHandler->onStop($this)];
         foreach ($this->clients as $client) {
             $promises[] = $client->close($code, $reason);
         }

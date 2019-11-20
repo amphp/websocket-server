@@ -16,49 +16,65 @@ use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
+use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
-$websocket = new class extends Websocket {
-    protected function handleHandshake(Request $request, Response $response): Promise
-    {
-        if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-            $response->setStatus(403);
+Loop::run(function (): Promise {
+    $websocket = new Websocket(new class implements ClientHandler {
+        /** @var Websocket */
+        private $endpoint;
+
+        public function onStart(Websocket $endpoint): Promise
+        {
+            $this->endpoint = $endpoint;
+            return new Success;
         }
 
-        return new Success($response);
-    }
+        public function onStop(Websocket $endpoint): Promise
+        {
+            $this->endpoint = null;
+            return new Success;
+        }
 
-    protected function handleClient(Client $client, Request $request, Response $response): Promise
-    {
-        return Amp\call(function () use ($client) {
-            while ($message = yield $client->receive()) {
-                \assert($message instanceof Message);
-                $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+        public function handleHandshake(Request $request, Response $response): Promise
+        {
+            if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
+                $response->setStatus(403);
             }
-        });
-    }
-};
 
-$sockets = [
-    SocketServer::listen('127.0.0.1:1337'),
-    SocketServer::listen('[::1]:1337'),
-];
+            return new Success($response);
+        }
 
-$router = new Router;
-$router->addRoute('GET', '/broadcast', $websocket);
-$router->setFallback(new DocumentRoot(__DIR__ . '/public'));
+        public function handleClient(Client $client, Request $request, Response $response): Promise
+        {
+            return Amp\call(function () use ($client) {
+                while ($message = yield $client->receive()) {
+                    \assert($message instanceof Message);
+                    $this->endpoint->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+                }
+            });
+        }
+    });
 
-$logHandler = new StreamHandler(getStdout());
-$logHandler->setFormatter(new ConsoleFormatter);
-$logger = new Logger('server');
-$logger->pushHandler($logHandler);
+    $sockets = [
+        SocketServer::listen('127.0.0.1:1337'),
+        SocketServer::listen('[::1]:1337'),
+    ];
 
-$server = new HttpServer($sockets, $router, $logger);
+    $router = new Router;
+    $router->addRoute('GET', '/broadcast', $websocket);
+    $router->setFallback(new DocumentRoot(__DIR__ . '/public'));
 
-Loop::run(function () use ($server) {
-    yield $server->start();
+    $logHandler = new StreamHandler(getStdout());
+    $logHandler->setFormatter(new ConsoleFormatter);
+    $logger = new Logger('server');
+    $logger->pushHandler($logHandler);
+
+    $server = new HttpServer($sockets, $router, $logger);
+
+    return $server->start();
 });

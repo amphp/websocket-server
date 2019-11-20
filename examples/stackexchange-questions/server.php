@@ -3,7 +3,8 @@
 // Note that this example requires amphp/artax, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
-use Amp\Http\Client\Client as HttpClient;
+use Amp\Http\Client\HttpClient;
+use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -17,6 +18,7 @@ use Amp\Promise;
 use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
+use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -24,87 +26,90 @@ use function Amp\call;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
-$websocket = new class extends Websocket {
-    /** @var string|null */
-    private $watcher;
+Loop::run(function (): Promise {
+    $websocket = new Websocket(new class implements ClientHandler {
+        /** @var Websocket */
+        private $endpoint;
 
-    /** @var HttpClient */
-    private $http;
+        /** @var string|null */
+        private $watcher;
 
-    /** @var int|null */
-    private $newestQuestion;
+        /** @var HttpClient */
+        private $http;
 
-    public function onStart(HttpServer $server): Promise
-    {
-        $promise = parent::onStart($server);
+        /** @var int|null */
+        private $newestQuestion;
 
-        $this->http = new HttpClient;
-        $this->watcher = Loop::repeat(10000, function () {
-            /** @var Response $response */
-            $response = yield $this->http->request(
-                new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
-            );
-            $json = yield $response->getBody();
+        public function onStart(Websocket $endpoint): Promise
+        {
+            $this->endpoint = $endpoint;
+            $this->http = HttpClientBuilder::buildDefault();
+            $this->watcher = Loop::repeat(10000, function () {
+                /** @var Response $response */
+                $response = yield $this->http->request(
+                    new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
+                );
+                $json = yield $response->getBody()->buffer();
 
-            $data = \json_decode($json, true);
+                $data = \json_decode($json, true);
 
-            if (!isset($data['items'])) {
-                return;
-            }
-
-            foreach (\array_reverse($data['items']) as $question) {
-                if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
-                    $this->newestQuestion = $question['question_id'];
-                    $this->broadcast(\json_encode($question));
+                if (!isset($data['items'])) {
+                    return;
                 }
-            }
-        });
 
-        return $promise;
-    }
+                foreach (\array_reverse($data['items']) as $question) {
+                    if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
+                        $this->newestQuestion = $question['question_id'];
+                        $this->endpoint->broadcast(\json_encode($question));
+                    }
+                }
+            });
 
-    public function onStop(HttpServer $server): Promise
-    {
-        Loop::cancel($this->watcher);
-
-        return parent::onStop($server);
-    }
-
-    protected function handleHandshake(Request $request, Response $response): Promise
-    {
-        if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-            $response->setStatus(403);
+            return new Success;
         }
 
-        return new Success($response);
-    }
+        public function onStop(Websocket $endpoint): Promise
+        {
+            Loop::cancel($this->watcher);
+            $this->endpoint = null;
 
-    protected function handleClient(Client $client, Request $request, Response $response): Promise
-    {
-        return call(function () use ($client) {
-            while ($message = yield $client->receive()) {
-                // Messages received on the connection are ignored and discarded.
+            return new Success;
+        }
+
+        public function handleHandshake(Request $request, Response $response): Promise
+        {
+            if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
+                $response->setStatus(403);
             }
-        });
-    }
-};
 
-$sockets = [
-    SocketServer::listen('127.0.0.1:1337'),
-    SocketServer::listen('[::1]:1337'),
-];
+            return new Success($response);
+        }
 
-$router = new Router;
-$router->addRoute('GET', '/live', $websocket);
-$router->setFallback(new DocumentRoot(__DIR__ . '/public'));
+        public function handleClient(Client $client, Request $request, Response $response): Promise
+        {
+            return call(function () use ($client) {
+                while ($message = yield $client->receive()) {
+                    // Messages received on the connection are ignored and discarded.
+                }
+            });
+        }
+    });
 
-$logHandler = new StreamHandler(getStdout());
-$logHandler->setFormatter(new ConsoleFormatter);
-$logger = new Logger('server');
-$logger->pushHandler($logHandler);
+    $sockets = [
+        SocketServer::listen('127.0.0.1:1337'),
+        SocketServer::listen('[::1]:1337'),
+    ];
 
-$server = new HttpServer($sockets, $router, $logger);
+    $router = new Router;
+    $router->addRoute('GET', '/live', $websocket);
+    $router->setFallback(new DocumentRoot(__DIR__ . '/public'));
 
-Loop::run(function () use ($server) {
-    yield $server->start();
+    $logHandler = new StreamHandler(getStdout());
+    $logHandler->setFormatter(new ConsoleFormatter);
+    $logger = new Logger('server');
+    $logger->pushHandler($logHandler);
+
+    $server = new HttpServer($sockets, $router, $logger);
+
+    return $server->start();
 });

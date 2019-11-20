@@ -7,7 +7,6 @@ use Amp\Deferred;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\Request;
-use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Status;
@@ -18,6 +17,7 @@ use Amp\Socket\Server;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
+use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Websocket;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
@@ -36,20 +36,29 @@ class WebsocketTest extends AsyncTestCase
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): \Generator
     {
-        $websocket = $this->createMockWebsocket();
+        $clientHandler = $this->createMockClientHandler();
 
-        $websocket->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
+        $clientHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
             ->willReturnCallback(function (Request $request, Response $response): Promise {
                 return new Success($response);
             });
 
-        /** @var Response $response */
-        $response = yield $websocket->handleRequest($request);
-        $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
+        $websocket = new Websocket($clientHandler);
 
-        if ($status === Status::SWITCHING_PROTOCOLS) {
-            $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
+        $server = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
+        yield $server->start();
+
+        try {
+            /** @var Response $response */
+            $response = yield $websocket->handleRequest($request);
+            $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
+
+            if ($status === Status::SWITCHING_PROTOCOLS) {
+                $this->assertEmpty(yield ByteStream\buffer($response->getBody()));
+            }
+        } finally {
+            $server->stop();
         }
     }
 
@@ -131,32 +140,41 @@ class WebsocketTest extends AsyncTestCase
     }
 
     /**
-     * @return Websocket|MockObject
+     * @return ClientHandler|MockObject
      */
-    public function createMockWebsocket(): Websocket
+    public function createMockClientHandler(): ClientHandler
     {
-        $server = new HttpServer(
-            [Server::listen('127.0.0.1:0')],
-            $this->createMock(RequestHandler::class),
-            new NullLogger
-        );
+        $clientHandler = $this->createMock(ClientHandler::class);
 
-        $websocket = $this->getMockForAbstractClass(Websocket::class);
-        \assert($websocket instanceof Websocket);
+        $clientHandler->method('onStart')
+            ->willReturn(new Success);
 
-        $websocket->onStart($server);
+        $clientHandler->method('onStop')
+            ->willReturn(new Success);
 
-        return $websocket;
+        return $clientHandler;
     }
 
     public function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
     {
-        $websocket = new class($factory, $onConnect) extends Websocket {
+        $websocket = new Websocket(new class($onConnect) implements ClientHandler {
             private $onConnect;
+            private $endpoint;
 
-            public function __construct(ClientFactory $factory, callable $onConnect)
+            public function onStart(Websocket $endpoint): Promise
             {
-                parent::__construct(null, null, $factory);
+                $this->endpoint = $endpoint;
+                return new Success;
+            }
+
+            public function onStop(Websocket $endpoint): Promise
+            {
+                $this->endpoint = null;
+                return new Success;
+            }
+
+            public function __construct(callable $onConnect)
+            {
                 $this->onConnect = $onConnect;
             }
 
@@ -167,9 +185,9 @@ class WebsocketTest extends AsyncTestCase
 
             public function handleClient(Client $client, Request $request, Response $response): Promise
             {
-                return call($this->onConnect, $this, $client);
+                return call($this->onConnect, $this->endpoint, $client);
             }
-        };
+        }, null, null, $factory);
 
         return new HttpServer(
             [$server],
@@ -183,13 +201,22 @@ class WebsocketTest extends AsyncTestCase
         $this->expectException(\Error::class);
         $this->expectExceptionMessage("handleHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
 
-        $websocket = $this->createMockWebsocket();
+        $clientHandler = $this->createMockClientHandler();
 
-        $websocket->expects($this->once())
+        $clientHandler->expects($this->once())
             ->method('handleHandshake')
             ->willReturn(new Success(false));
 
-        $response = yield $websocket->handleRequest($this->createRequest());
+        $websocket = new Websocket($clientHandler);
+
+        $server = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
+        yield $server->start();
+
+        try {
+            $response = yield $websocket->handleRequest($this->createRequest());
+        } finally {
+            $server->stop();
+        }
     }
 
     protected function execute(callable $onConnect, Client $client): \Generator
