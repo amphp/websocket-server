@@ -51,7 +51,8 @@ interface ClientHandler
     /**
      * This method is called when a new websocket connection is established on the endpoint.
      * The method may handle all messages itself or pass the connection along to a separate
-     * handler if desired.
+     * handler if desired. The client connection is closed when the promise returned from
+     * this method resolves.
      *
      * ```
      * return Amp\call(function () use ($client) {

@@ -20,7 +20,7 @@ are always welcome!
 
 ## Requirements
 
-- PHP 7.1+
+- PHP 7.2+
 
 ## Example
 
@@ -32,16 +32,16 @@ are always welcome!
 // amphp/http-server-static-content
 // amphp/log
 
+use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
-use Amp\Http\Server\Server;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
-use Amp\Socket;
+use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
@@ -64,7 +64,7 @@ $websocket = new class extends Websocket {
 
     public function handleClient(Client $client, Request $request, Response $response): Promise
     {
-        return call(function() use($client) {
+        return call(function() use ($client): \Generator {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
                 $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
@@ -73,23 +73,23 @@ $websocket = new class extends Websocket {
     }
 };
 
-$sockets = [
-    Socket\listen('127.0.0.1:1337'),
-    Socket\listen('[::1]:1337'),
-];
+Loop::run(function () use ($websocket): Promise {
+    $sockets = [
+        SocketServer::listen('127.0.0.1:1337'),
+        SocketServer::listen('[::1]:1337'),
+    ];
 
-$router = new Router;
-$router->addRoute('GET', '/broadcast', $websocket);
-$router->setFallback(new DocumentRoot(__DIR__ . '/public'));
+    $router = new Router;
+    $router->addRoute('GET', '/broadcast', $websocket);
+    $router->setFallback(new DocumentRoot(__DIR__ . '/public'));
 
-$logHandler = new StreamHandler(getStdout());
-$logHandler->setFormatter(new ConsoleFormatter);
-$logger = new Logger('server');
-$logger->pushHandler($logHandler);
+    $logHandler = new StreamHandler(getStdout());
+    $logHandler->setFormatter(new ConsoleFormatter);
+    $logger = new Logger('server');
+    $logger->pushHandler($logHandler);
 
-$server = new Server($sockets, $router, $logger);
+    $server = new HttpServer($sockets, $router, $logger);
 
-Loop::run(function () use ($server) {
-    yield $server->start();
+    return $server->start();
 });
 ```
