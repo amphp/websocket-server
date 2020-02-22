@@ -262,25 +262,20 @@ final class Websocket implements RequestHandler, ServerObserver
 
     private function broadcastData(string $data, bool $binary, array $exceptIds = []): Promise
     {
-        $promises = [];
-        if (empty($exceptIds)) {
-            foreach ($this->clients as $id => $client) {
-                $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
-            }
-        } else {
-            $exceptIdLookup = \array_flip($exceptIds);
+        $exceptIdLookup = \array_flip($exceptIds);
 
-            if ($exceptIdLookup === null) {
-                throw new \Error('Unable to array_flip() the passed IDs');
-            }
-
-            foreach ($this->clients as $id => $client) {
-                if (isset($exceptIdLookup[$id])) {
-                    continue;
-                }
-                $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
-            }
+        if ($exceptIdLookup === null) {
+            throw new \Error('Unable to array_flip() the passed IDs');
         }
+
+        $promises = [];
+        foreach ($this->clients as $id => $client) {
+            if (isset($exceptIdLookup[$id])) {
+                continue;
+            }
+            $promises[] = $binary ? $client->sendBinary($data) : $client->send($data);
+        }
+
         return Promise\any($promises);
     }
 
