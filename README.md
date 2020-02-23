@@ -45,6 +45,7 @@ use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
+use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -52,10 +53,28 @@ use function Amp\call;
 
 require __DIR__ . '/vendor/autoload.php';
 
-$websocket = new class extends Websocket {
+$websocket = new Websocket(new class implements ClientHandler {
+    private const ALLOWED_ORIGINS = [
+        'http://localhost:1337',
+        'http://127.0.0.1:1337',
+        'http://[::1]:1337'
+    ];
+    
+    /** @var Websocket */
+    private $endpoint;
+    
+    public function onStart(Websocket $endpoint) : Promise {
+        $this->endpoint = $endpoint;
+        return new Success;
+    }
+
+    public function onStop(Websocket $endpoint) : Promise {
+        return new Success; // Simple example, nothing to do.
+    }
+    
     public function handleHandshake(Request $request, Response $response): Promise
     {
-        if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
+        if (!\in_array($request->getHeader('origin'), self::ALLOWED_ORIGINS, true)) {
             $response->setStatus(403);
         }
 
@@ -64,14 +83,18 @@ $websocket = new class extends Websocket {
 
     public function handleClient(Client $client, Request $request, Response $response): Promise
     {
-        return call(function() use ($client): \Generator {
+        return call(function () use ($client): \Generator {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
-                $this->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+                $this->endpoint->broadcast(\sprintf(
+                    '%d: %s',
+                    $client->getId(),
+                    yield $message->buffer()
+                ));
             }
-        });  
+        });
     }
-};
+});
 
 Loop::run(function () use ($websocket): Promise {
     $sockets = [
