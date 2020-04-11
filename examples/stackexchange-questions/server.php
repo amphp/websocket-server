@@ -6,10 +6,10 @@
 use Amp\Http\Client\HttpClient;
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
+use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
-use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
@@ -28,9 +28,6 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
     $websocket = new Websocket(new class implements ClientHandler {
-        /** @var Websocket */
-        private $endpoint;
-
         /** @var string|null */
         private $watcher;
 
@@ -40,11 +37,10 @@ Loop::run(function (): Promise {
         /** @var int|null */
         private $newestQuestion;
 
-        public function onStart(Websocket $endpoint): Promise
+        public function onStart(HttpServer $server, Websocket $endpoint): Promise
         {
-            $this->endpoint = $endpoint;
             $this->http = HttpClientBuilder::buildDefault();
-            $this->watcher = Loop::repeat(10000, function () {
+            $this->watcher = Loop::repeat(10000, function () use ($endpoint) {
                 /** @var Response $response */
                 $response = yield $this->http->request(
                     new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
@@ -60,7 +56,7 @@ Loop::run(function (): Promise {
                 foreach (\array_reverse($data['items']) as $question) {
                     if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
                         $this->newestQuestion = $question['question_id'];
-                        $this->endpoint->broadcast(\json_encode($question));
+                        $endpoint->broadcast(\json_encode($question));
                     }
                 }
             });
@@ -68,15 +64,13 @@ Loop::run(function (): Promise {
             return new Success;
         }
 
-        public function onStop(Websocket $endpoint): Promise
+        public function onStop(HttpServer $server, Websocket $endpoint): Promise
         {
             Loop::cancel($this->watcher);
-            $this->endpoint = null;
-
             return new Success;
         }
 
-        public function handleHandshake(Request $request, Response $response): Promise
+        public function handleHandshake(Websocket $endpoint, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
                 $response->setStatus(403);
@@ -85,7 +79,7 @@ Loop::run(function (): Promise {
             return new Success($response);
         }
 
-        public function handleClient(Client $client, Request $request, Response $response): Promise
+        public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise
         {
             return call(function () use ($client) {
                 while ($message = yield $client->receive()) {

@@ -5,10 +5,10 @@ namespace Amp\Websocket\Server;
 use Amp\Coroutine;
 use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\ErrorHandler;
+use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\Server;
 use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use Amp\Promise;
@@ -142,7 +142,7 @@ final class Websocket implements RequestHandler, ServerObserver
             'sec-websocket-accept' => generateAcceptFromKey($acceptKey),
         ]);
 
-        $response = yield $this->clientHandler->handleHandshake($request, $response);
+        $response = yield $this->clientHandler->handleHandshake($this, $request, $response);
 
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
@@ -232,7 +232,7 @@ final class Websocket implements RequestHandler, ServerObserver
         });
 
         try {
-            yield $this->clientHandler->handleClient($client, $request, $response);
+            yield $this->clientHandler->handleClient($this, $client, $request, $response);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
@@ -363,11 +363,11 @@ final class Websocket implements RequestHandler, ServerObserver
      * Server sockets have been opened, but are not yet accepting client connections. This method should be used to set
      * up any necessary state for responding to requests, including starting loop watchers such as timers.
      *
-     * @param Server $server
+     * @param HttpServer $server
      *
      * @return Promise
      */
-    public function onStart(Server $server): Promise
+    public function onStart(HttpServer $server): Promise
     {
         $this->logger = $server->getLogger();
         $this->errorHandler = $server->getErrorHandler();
@@ -377,7 +377,7 @@ final class Websocket implements RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return $this->clientHandler->onStart($this);
+        return $this->clientHandler->onStart($server, $this);
     }
 
     /**
@@ -385,16 +385,16 @@ final class Websocket implements RequestHandler, ServerObserver
      * No further requests are accepted and any connected clients should be closed gracefully and any loop watchers
      * cancelled.
      *
-     * @param Server $server
+     * @param HttpServer $server
      *
      * @return Promise
      */
-    public function onStop(Server $server): Promise
+    public function onStop(HttpServer $server): Promise
     {
         $code = Code::GOING_AWAY;
         $reason = 'Server shutting down!';
 
-        $promises = [$this->clientHandler->onStop($this)];
+        $promises = [$this->clientHandler->onStop($server, $this)];
         foreach ($this->clients as $client) {
             $promises[] = $client->close($code, $reason);
         }

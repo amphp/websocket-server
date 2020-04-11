@@ -6,9 +6,9 @@ use Amp\ByteStream;
 use Amp\Deferred;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
+use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\Server as HttpServer;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Promise;
@@ -40,7 +40,7 @@ class WebsocketTest extends AsyncTestCase
 
         $clientHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
-            ->willReturnCallback(function (Request $request, Response $response): Promise {
+            ->willReturnCallback(function (Websocket $endpoint, Request $request, Response $response): Promise {
                 return new Success($response);
             });
 
@@ -159,17 +159,14 @@ class WebsocketTest extends AsyncTestCase
     {
         $websocket = new Websocket(new class($onConnect) implements ClientHandler {
             private $onConnect;
-            private $endpoint;
 
-            public function onStart(Websocket $endpoint): Promise
+            public function onStart(HttpServer $server, Websocket $endpoint): Promise
             {
-                $this->endpoint = $endpoint;
                 return new Success;
             }
 
-            public function onStop(Websocket $endpoint): Promise
+            public function onStop(HttpServer $server, Websocket $endpoint): Promise
             {
-                $this->endpoint = null;
                 return new Success;
             }
 
@@ -178,14 +175,14 @@ class WebsocketTest extends AsyncTestCase
                 $this->onConnect = $onConnect;
             }
 
-            public function handleHandshake(Request $request, Response $response): Promise
+            public function handleHandshake(Websocket $websocket, Request $request, Response $response): Promise
             {
                 return new Success($response);
             }
 
-            public function handleClient(Client $client, Request $request, Response $response): Promise
+            public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise
             {
-                return call($this->onConnect, $this->endpoint, $client);
+                return call($this->onConnect, $endpoint, $client);
             }
         }, null, null, $factory);
 
