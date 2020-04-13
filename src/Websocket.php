@@ -42,7 +42,7 @@ final class Websocket implements RequestHandler, ServerObserver
     /** @var ClientFactory */
     private $clientFactory;
 
-    /** @var Client[] */
+    /** @var Client[] Indexed by client ID. */
     private $clients = [];
 
     /**
@@ -347,7 +347,23 @@ final class Websocket implements RequestHandler, ServerObserver
      */
     public function getLogger(): PsrLogger
     {
+        if ($this->logger === null) {
+            throw new \Error('Cannot get logger until the server has started');
+        }
+
         return $this->logger;
+    }
+
+    /**
+     * @return ErrorHandler Server error handler.
+     */
+    public function getErrorHandler(): ErrorHandler
+    {
+        if ($this->errorHandler === null) {
+            throw new \Error('Cannot get error handler until the server has started');
+        }
+
+        return $this->errorHandler;
     }
 
     /**

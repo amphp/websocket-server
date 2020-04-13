@@ -11,6 +11,7 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
 use Amp\Http\Server\StaticContent\DocumentRoot;
+use Amp\Http\Status;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
@@ -73,7 +74,7 @@ Loop::run(function (): Promise {
         public function handleHandshake(Websocket $endpoint, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-                $response->setStatus(403);
+                return $endpoint->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
             }
 
             return new Success($response);
