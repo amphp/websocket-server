@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket\Server;
 
-use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Promise;
@@ -14,23 +13,21 @@ interface ClientHandler
      * Called when the HTTP server is started. If an instance of ClientHandler is given to multiple
      * Websocket instances, this method will be called once for each instance.
      *
-     * @param HttpServer $server
-     * @param Websocket  $endpoint
+     * @param Endpoint $endpoint
      *
      * @return Promise<void>
      */
-    public function onStart(HttpServer $server, Websocket $endpoint): Promise;
+    public function onStart(Endpoint $endpoint): Promise;
 
     /**
      * Called when the HTTP server is stopped. If an instance of ClientHandler is given to multiple
      * Websocket instances, this method will be called once for each instance.
      *
-     * @param HttpServer $server
-     * @param Websocket  $endpoint
+     * @param Endpoint $endpoint
      *
      * @return Promise<void>
      */
-    public function onStop(HttpServer $server, Websocket $endpoint): Promise;
+    public function onStop(Endpoint $endpoint): Promise;
 
     /**
      * Respond to websocket handshake requests.
@@ -42,17 +39,19 @@ interface ClientHandler
      * This method provides an opportunity to set application-specific headers, including
      * cookies, on the websocket response. Although any non-101 status code can be used
      * to reject the websocket connection it is generally recommended to use a 4xx status
-     * code that is descriptive of why the handshake was rejected.
+     * code that is descriptive of why the handshake was rejected. You can optionally use
+     * the server error handler accessible from Endpoint::getErrorHandler() to generate
+     * an error response, e.g., return $endpoint->getErrorHandler()->handleError(403).
      *
-     * @param Websocket $endpoint The associated websocket endpoint to which the client is connecting.
-     * @param Request   $request  The HTTP request that instigated the handshake
-     * @param Response  $response The switching protocol response for adding headers, etc.
+     * @param Endpoint $endpoint The associated websocket endpoint to which the client is connecting.
+     * @param Request  $request  The HTTP request that instigated the handshake
+     * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Promise<Response> Resolve the Promise with a Response set to a status code
      *                           other than {@link Status::SWITCHING_PROTOCOLS} to deny the
      *                           handshake Request.
      */
-    public function handleHandshake(Websocket $endpoint, Request $request, Response $response): Promise;
+    public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise;
 
     /**
      * This method is called when a new websocket connection is established on the endpoint.
@@ -69,12 +68,12 @@ interface ClientHandler
      * });
      * ```
      *
-     * @param Websocket $endpoint The associated websocket endpoint to which the client is connected.
-     * @param Client    $client   The websocket client connection.
-     * @param Request   $request  The HTTP request that instigated the connection.
-     * @param Response  $response The HTTP response sent to client to accept the connection.
+     * @param Endpoint $endpoint The associated websocket endpoint to which the client is connected.
+     * @param Client   $client   The websocket client connection.
+     * @param Request  $request  The HTTP request that instigated the connection.
+     * @param Response $response The HTTP response sent to client to accept the connection.
      *
      * @return Promise<void>
      */
-    public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise;
+    public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise;
 }

@@ -20,6 +20,7 @@ use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -38,7 +39,7 @@ Loop::run(function (): Promise {
         /** @var int|null */
         private $newestQuestion;
 
-        public function onStart(HttpServer $server, Websocket $endpoint): Promise
+        public function onStart(Endpoint $endpoint): Promise
         {
             $this->http = HttpClientBuilder::buildDefault();
             $this->watcher = Loop::repeat(10000, function () use ($endpoint) {
@@ -65,13 +66,13 @@ Loop::run(function (): Promise {
             return new Success;
         }
 
-        public function onStop(HttpServer $server, Websocket $endpoint): Promise
+        public function onStop(Endpoint $endpoint): Promise
         {
             Loop::cancel($this->watcher);
             return new Success;
         }
 
-        public function handleHandshake(Websocket $endpoint, Request $request, Response $response): Promise
+        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
                 return $endpoint->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
@@ -80,7 +81,7 @@ Loop::run(function (): Promise {
             return new Success($response);
         }
 
-        public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise
+        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
         {
             return call(function () use ($client) {
                 while ($message = yield $client->receive()) {

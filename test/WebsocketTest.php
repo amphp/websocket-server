@@ -18,6 +18,7 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
@@ -160,12 +161,12 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(new class($onConnect) implements ClientHandler {
             private $onConnect;
 
-            public function onStart(HttpServer $server, Websocket $endpoint): Promise
+            public function onStart(Endpoint $endpoint): Promise
             {
                 return new Success;
             }
 
-            public function onStop(HttpServer $server, Websocket $endpoint): Promise
+            public function onStop(Endpoint $endpoint): Promise
             {
                 return new Success;
             }
@@ -175,12 +176,12 @@ class WebsocketTest extends AsyncTestCase
                 $this->onConnect = $onConnect;
             }
 
-            public function handleHandshake(Websocket $websocket, Request $request, Response $response): Promise
+            public function handleHandshake(Endpoint $websocket, Request $request, Response $response): Promise
             {
                 return new Success($response);
             }
 
-            public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise
+            public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
             {
                 return call($this->onConnect, $endpoint, $client);
             }

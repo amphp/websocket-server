@@ -12,6 +12,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Options;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
 use Psr\Log\NullLogger;
 
@@ -26,35 +27,30 @@ Amp\Loop::run(function (): Promise {
         ->withValidateUtf8(true);
 
     $websocket = new Websocket(new class implements ClientHandler {
-        /** @var Websocket */
-        private $endpoint;
-
-        public function onStart(Websocket $endpoint): Promise
+        public function onStart(Endpoint $endpoint): Promise
         {
-            $this->endpoint = $endpoint;
             return new Success;
         }
 
-        public function onStop(Websocket $endpoint): Promise
+        public function onStop(Endpoint $endpoint): Promise
         {
-            $this->endpoint = null;
             return new Success;
         }
 
-        public function handleHandshake(Request $request, Response $response): Promise
+        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
         {
             return new Success($response);
         }
 
-        public function handleClient(Client $client, Request $request, Response $response): Promise
+        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
         {
-            return Amp\call(function () use ($client) {
+            return Amp\call(function () use ($endpoint, $client) {
                 while ($message = yield $client->receive()) {
                     \assert($message instanceof Message);
                     if ($message->isBinary()) {
-                        yield $this->endpoint->broadcastBinary(yield $message->buffer());
+                        yield $endpoint->broadcastBinary(yield $message->buffer());
                     } else {
-                        yield $this->endpoint->broadcast(yield $message->buffer());
+                        yield $endpoint->broadcast(yield $message->buffer());
                     }
                 }
             });

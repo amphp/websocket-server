@@ -22,7 +22,7 @@ use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\Websocket\generateAcceptFromKey;
 
-final class Websocket implements RequestHandler, ServerObserver
+final class Websocket implements Endpoint, RequestHandler, ServerObserver
 {
     /** @var ClientHandler */
     private $clientHandler;
@@ -193,8 +193,9 @@ final class Websocket implements RequestHandler, ServerObserver
         // @formatter:off
         /** @noinspection SuspiciousBinaryOperationInspection */
         \assert($this->logger->debug(\sprintf(
-            'Upgraded %s #%d to websocket connection',
-            $client->getRemoteAddress(),
+            'Upgraded %s #%d to websocket connection #%d',
+            $socket->getRemoteAddress()->toString(),
+            (int) $socket->getResource(),
             $client->getId()
         )) || true);
         // @formatter:on
@@ -393,7 +394,7 @@ final class Websocket implements RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return $this->clientHandler->onStart($server, $this);
+        return $this->clientHandler->onStart($this);
     }
 
     /**
@@ -410,7 +411,7 @@ final class Websocket implements RequestHandler, ServerObserver
         $code = Code::GOING_AWAY;
         $reason = 'Server shutting down!';
 
-        $promises = [$this->clientHandler->onStop($server, $this)];
+        $promises = [$this->clientHandler->onStop($this)];
         foreach ($this->clients as $client) {
             $promises[] = $client->close($code, $reason);
         }

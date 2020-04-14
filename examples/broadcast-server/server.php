@@ -18,6 +18,7 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -26,19 +27,19 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
     $websocket = new Websocket(new class implements ClientHandler {
-        public function onStart(HttpServer $server, Websocket $endpoint): Promise
+        public function onStart(Endpoint $endpoint): Promise
         {
             // Trivial example does not require any startup logic.
             return new Success;
         }
 
-        public function onStop(HttpServer $server, Websocket $endpoint): Promise
+        public function onStop(Endpoint $endpoint): Promise
         {
             // Trivial example does not require any shutdown logic.
             return new Success;
         }
 
-        public function handleHandshake(Websocket $endpoint, Request $request, Response $response): Promise
+        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
                 return $endpoint->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
@@ -47,7 +48,7 @@ Loop::run(function (): Promise {
             return new Success($response);
         }
 
-        public function handleClient(Websocket $endpoint, Client $client, Request $request, Response $response): Promise
+        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
         {
             return Amp\call(function () use ($endpoint, $client) {
                 while ($message = yield $client->receive()) {
