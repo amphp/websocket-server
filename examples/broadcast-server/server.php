@@ -27,18 +27,6 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
     $websocket = new Websocket(new class implements ClientHandler {
-        public function onStart(Endpoint $endpoint): Promise
-        {
-            // Trivial example does not require any startup logic.
-            return new Success;
-        }
-
-        public function onStop(Endpoint $endpoint): Promise
-        {
-            // Trivial example does not require any shutdown logic.
-            return new Success;
-        }
-
         public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {

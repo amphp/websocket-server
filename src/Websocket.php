@@ -11,6 +11,7 @@ use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
+use Amp\MultiReasonException;
 use Amp\Promise;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClosedException;
@@ -20,12 +21,16 @@ use Amp\Websocket\CompressionContextFactory;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
+use function Amp\call;
 use function Amp\Websocket\generateAcceptFromKey;
 
 final class Websocket implements Endpoint, RequestHandler, ServerObserver
 {
     /** @var ClientHandler */
     private $clientHandler;
+
+    /** @var \SplObjectStorage WebsocketObserver storage */
+    private $observers;
 
     /** @var PsrLogger */
     private $logger;
@@ -57,10 +62,24 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
         ?CompressionContextFactory $compressionFactory = null,
         ?ClientFactory $clientFactory = null
     ) {
+        $this->observers = new \SplObjectStorage;
+
         $this->clientHandler = $clientHandler;
         $this->options = $options ?? Options::createServerDefault();
         $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
         $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
+
+        if ($this->clientHandler instanceof WebsocketObserver) {
+            $this->observers->attach($this->clientHandler);
+        }
+
+        if ($this->clientFactory instanceof WebsocketObserver) {
+            $this->observers->attach($this->clientFactory);
+        }
+
+        if ($this->compressionFactory instanceof WebsocketObserver) {
+            $this->observers->attach($this->compressionFactory);
+        }
     }
 
     public function handleRequest(Request $request): Promise
@@ -376,13 +395,17 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
     }
 
     /**
-     * Invoked when the server is starting.
-     * Server sockets have been opened, but are not yet accepting client connections. This method should be used to set
-     * up any necessary state for responding to requests, including starting loop watchers such as timers.
+     * Attaches a WebsocketObserver that is notified when the server starts and stops.
      *
-     * @param HttpServer $server
-     *
-     * @return Promise
+     * @param WebsocketObserver $observer
+     */
+    public function attach(WebsocketObserver $observer): void
+    {
+        $this->observers->attach($observer);
+    }
+
+    /**
+     * @inheritDoc
      */
     public function onStart(HttpServer $server): Promise
     {
@@ -394,28 +417,48 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return $this->clientHandler->onStart($this);
+        return call(function (): \Generator {
+            $onStartPromises = [];
+            foreach ($this->observers as $observer) {
+                \assert($observer instanceof WebsocketObserver);
+                $onStartPromises[] = $observer->onStart($this);
+            }
+
+            [$exceptions] = yield Promise\any($onStartPromises);
+
+            if (!empty($exceptions)) {
+                throw new MultiReasonException($exceptions, 'Websocket initialization failed');
+            }
+        });
     }
 
     /**
-     * Invoked when the server has initiated stopping.
-     * No further requests are accepted and any connected clients should be closed gracefully and any loop watchers
-     * cancelled.
-     *
-     * @param HttpServer $server
-     *
-     * @return Promise
+     * @inheritDoc
      */
     public function onStop(HttpServer $server): Promise
     {
-        $code = Code::GOING_AWAY;
-        $reason = 'Server shutting down!';
+        return call(function (): \Generator {
+            $code = Code::GOING_AWAY;
+            $reason = 'Server shutting down!';
 
-        $promises = [$this->clientHandler->onStop($this)];
-        foreach ($this->clients as $client) {
-            $promises[] = $client->close($code, $reason);
-        }
+            $onStopPromises = [];
+            foreach ($this->observers as $observer) {
+                \assert($observer instanceof WebsocketObserver);
+                $onStopPromises[] = $observer->onStop($this);
+            }
 
-        return Promise\any($promises);
+            $closePromises = [];
+            foreach ($this->clients as $client) {
+                $closePromises[] = $client->close($code, $reason);
+            }
+
+            yield Promise\any($closePromises); // Ignore client close failures since we're shutting down anyway.
+
+            [$exceptions] = yield Promise\any($onStopPromises);
+
+            if (!empty($exceptions)) {
+                throw new MultiReasonException($exceptions, 'Websocket shutdown failed');
+            }
+        });
     }
 }

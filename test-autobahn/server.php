@@ -27,16 +27,6 @@ Amp\Loop::run(function (): Promise {
         ->withValidateUtf8(true);
 
     $websocket = new Websocket(new class implements ClientHandler {
-        public function onStart(Endpoint $endpoint): Promise
-        {
-            return new Success;
-        }
-
-        public function onStop(Endpoint $endpoint): Promise
-        {
-            return new Success;
-        }
-
         public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
         {
             return new Success($response);

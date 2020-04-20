@@ -37,11 +37,11 @@ class WebsocketTest extends AsyncTestCase
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): \Generator
     {
-        $clientHandler = $this->createMockClientHandler();
+        $clientHandler = $this->createMock(ClientHandler::class);
 
         $clientHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
-            ->willReturnCallback(function (Websocket $endpoint, Request $request, Response $response): Promise {
+            ->willReturnCallback(function (Endpoint $endpoint, Request $request, Response $response): Promise {
                 return new Success($response);
             });
 
@@ -140,36 +140,10 @@ class WebsocketTest extends AsyncTestCase
         return $testCases;
     }
 
-    /**
-     * @return ClientHandler|MockObject
-     */
-    public function createMockClientHandler(): ClientHandler
-    {
-        $clientHandler = $this->createMock(ClientHandler::class);
-
-        $clientHandler->method('onStart')
-            ->willReturn(new Success);
-
-        $clientHandler->method('onStop')
-            ->willReturn(new Success);
-
-        return $clientHandler;
-    }
-
     public function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
     {
         $websocket = new Websocket(new class($onConnect) implements ClientHandler {
             private $onConnect;
-
-            public function onStart(Endpoint $endpoint): Promise
-            {
-                return new Success;
-            }
-
-            public function onStop(Endpoint $endpoint): Promise
-            {
-                return new Success;
-            }
 
             public function __construct(callable $onConnect)
             {
@@ -199,7 +173,7 @@ class WebsocketTest extends AsyncTestCase
         $this->expectException(\Error::class);
         $this->expectExceptionMessage("handleHandshake() must resolve to an instance of Amp\\Http\\Server\\Response");
 
-        $clientHandler = $this->createMockClientHandler();
+        $clientHandler = $this->createMock(ClientHandler::class);
 
         $clientHandler->expects($this->once())
             ->method('handleHandshake')

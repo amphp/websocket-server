@@ -6,6 +6,7 @@
 use Amp\Http\Client\HttpClient;
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
+use Amp\Http\Client\Response as ClientResponse;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -22,6 +23,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketObserver;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 use function Amp\call;
@@ -29,7 +31,7 @@ use function Amp\call;
 require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
-    $websocket = new Websocket(new class implements ClientHandler {
+    $websocket = new Websocket(new class implements ClientHandler, WebsocketObserver {
         /** @var string|null */
         private $watcher;
 
@@ -43,7 +45,7 @@ Loop::run(function (): Promise {
         {
             $this->http = HttpClientBuilder::buildDefault();
             $this->watcher = Loop::repeat(10000, function () use ($endpoint) {
-                /** @var Response $response */
+                /** @var ClientResponse $response */
                 $response = yield $this->http->request(
                     new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
                 );
