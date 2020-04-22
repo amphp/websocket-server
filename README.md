@@ -15,8 +15,7 @@ composer require amphp/websocket-server
 
 ## Documentation
 
-The documentation for this library is currently a work in progress. Pull Requests to improve the documentation 
-are always welcome!
+The documentation for this library is currently a work in progress. Pull Requests to improve the documentation are always welcome!
 
 ## Requirements
 
@@ -46,6 +45,7 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -60,33 +60,21 @@ $websocket = new Websocket(new class implements ClientHandler {
         'http://[::1]:1337'
     ];
     
-    /** @var Websocket */
-    private $endpoint;
-    
-    public function onStart(Websocket $endpoint) : Promise {
-        $this->endpoint = $endpoint;
-        return new Success;
-    }
-
-    public function onStop(Websocket $endpoint) : Promise {
-        return new Success; // Simple example, nothing to do.
-    }
-    
-    public function handleHandshake(Request $request, Response $response): Promise
+    public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), self::ALLOWED_ORIGINS, true)) {
-            $response->setStatus(403);
+            return $endpoint->getErrorHandler()->handleError(403);
         }
 
         return new Success($response);
     }
 
-    public function handleClient(Client $client, Request $request, Response $response): Promise
+    public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
     {
-        return call(function () use ($client): \Generator {
+        return call(function () use ($endpoint, $client): \Generator {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
-                $this->endpoint->broadcast(\sprintf(
+                $endpoint->broadcast(\sprintf(
                     '%d: %s',
                     $client->getId(),
                     yield $message->buffer()
