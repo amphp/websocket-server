@@ -21,6 +21,8 @@ if (!isset($report["amphp-websocket-server"])) {
 
 $report = $report["amphp-websocket-server"];
 
+\uksort($report, 'version_compare');
+
 $climate->out("Autobahn test report:");
 
 $passed = 0;
