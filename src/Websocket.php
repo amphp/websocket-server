@@ -417,11 +417,11 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return call(function (): \Generator {
+        return call(function () use ($server): \Generator {
             $onStartPromises = [];
             foreach ($this->observers as $observer) {
                 \assert($observer instanceof WebsocketObserver);
-                $onStartPromises[] = $observer->onStart($this);
+                $onStartPromises[] = $observer->onStart($server, $this);
             }
 
             [$exceptions] = yield Promise\any($onStartPromises);
@@ -437,14 +437,14 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
      */
     public function onStop(HttpServer $server): Promise
     {
-        return call(function (): \Generator {
+        return call(function () use ($server): \Generator {
             $code = Code::GOING_AWAY;
             $reason = 'Server shutting down!';
 
             $onStopPromises = [];
             foreach ($this->observers as $observer) {
                 \assert($observer instanceof WebsocketObserver);
-                $onStopPromises[] = $observer->onStop($this);
+                $onStopPromises[] = $observer->onStop($server, $this);
             }
 
             $closePromises = [];

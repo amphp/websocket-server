@@ -20,6 +20,7 @@ use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Endpoint;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketObserver;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
@@ -28,6 +29,79 @@ use function Amp\call;
 
 class WebsocketTest extends AsyncTestCase
 {
+    protected function execute(callable $onConnect, Client $client): \Generator
+    {
+        \assert($client instanceof MockObject);
+
+        $client->method('close')
+            ->willReturn(new Success);
+
+        $factory = $this->createMock(ClientFactory::class);
+        $factory->method('createClient')
+            ->willReturn($client);
+
+        $server = Server::listen("127.0.0.1:0");
+
+        $deferred = new Deferred;
+
+        $webserver = $this->createWebsocketServer(
+            $server,
+            $factory,
+            function (Websocket $websocket, Client $client) use ($onConnect, $deferred): Promise {
+                $promise = call($onConnect, $websocket, $client);
+                $deferred->resolve($promise);
+                return $promise;
+            }
+        );
+
+        yield $webserver->start();
+
+        $socket = yield Socket\connect($server->getAddress()->toString());
+        \assert($socket instanceof Socket\EncryptableSocket);
+
+        $request = $this->createRequest();
+        yield $socket->write($this->writeRequest($request));
+
+        asyncCall(function () use ($socket): \Generator {
+            while (null !== yield $socket->read());
+        });
+
+        try {
+            yield $deferred->promise();
+        } finally {
+            yield $webserver->stop();
+            $socket->close();
+        }
+    }
+
+    protected function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
+    {
+        $websocket = new Websocket(new class($onConnect) implements ClientHandler {
+            private $onConnect;
+
+            public function __construct(callable $onConnect)
+            {
+                $this->onConnect = $onConnect;
+            }
+
+            public function handleHandshake(Endpoint $websocket, Request $request, Response $response): Promise
+            {
+                return new Success($response);
+            }
+
+            public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+            {
+                return call($this->onConnect, $endpoint, $client);
+            }
+        }, null, null, $factory);
+
+        return new HttpServer(
+            [$server],
+            $websocket,
+            new NullLogger
+        );
+    }
+
     /**
      * @param Request $request Request initiating the handshake.
      * @param int     $status Expected status code.
@@ -140,34 +214,6 @@ class WebsocketTest extends AsyncTestCase
         return $testCases;
     }
 
-    public function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
-    {
-        $websocket = new Websocket(new class($onConnect) implements ClientHandler {
-            private $onConnect;
-
-            public function __construct(callable $onConnect)
-            {
-                $this->onConnect = $onConnect;
-            }
-
-            public function handleHandshake(Endpoint $websocket, Request $request, Response $response): Promise
-            {
-                return new Success($response);
-            }
-
-            public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
-            {
-                return call($this->onConnect, $endpoint, $client);
-            }
-        }, null, null, $factory);
-
-        return new HttpServer(
-            [$server],
-            $websocket,
-            new NullLogger
-        );
-    }
-
     public function testInvalidOnHandshake(): \Generator
     {
         $this->expectException(\Error::class);
@@ -188,51 +234,6 @@ class WebsocketTest extends AsyncTestCase
             $response = yield $websocket->handleRequest($this->createRequest());
         } finally {
             $server->stop();
-        }
-    }
-
-    protected function execute(callable $onConnect, Client $client): \Generator
-    {
-        \assert($client instanceof MockObject);
-
-        $client->method('close')
-            ->willReturn(new Success);
-
-        $factory = $this->createMock(ClientFactory::class);
-        $factory->method('createClient')
-            ->willReturn($client);
-
-        $server = Server::listen("127.0.0.1:0");
-
-        $deferred = new Deferred;
-
-        $webserver = $this->createWebsocketServer(
-            $server,
-            $factory,
-            function (Websocket $websocket, Client $client) use ($onConnect, $deferred): Promise {
-                $promise = call($onConnect, $websocket, $client);
-                $deferred->resolve($promise);
-                return $promise;
-            }
-        );
-
-        yield $webserver->start();
-
-        $socket = yield Socket\connect($server->getAddress()->toString());
-        \assert($socket instanceof Socket\EncryptableSocket);
-
-        $request = $this->createRequest();
-        yield $socket->write($this->writeRequest($request));
-
-        asyncCall(function () use ($socket): \Generator {
-            while (null !== yield $socket->read());
-        });
-
-        try {
-            yield $deferred->promise();
-        } finally {
-            yield $webserver->stop();
-            $socket->close();
         }
     }
 
@@ -288,5 +289,27 @@ class WebsocketTest extends AsyncTestCase
             $websocket->multicast('Text', [$client->getId()]);
             $websocket->multicastBinary('Binary', [$client->getId()]);
         }, $client);
+    }
+
+    public function testWebsocketObserverAttachment(): \Generator
+    {
+        $websocket = new Websocket($this->createMock(ClientHandler::class));
+
+        $webserver = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
+
+        $observer = $this->createMock(WebsocketObserver::class);
+        $observer->expects($this->once())
+            ->method('onStart')
+            ->willReturn(new Success);
+        $observer->expects($this->once())
+            ->method('onStop')
+            ->willReturn(new Success);
+
+        $websocket->attach($observer);
+        $websocket->attach($observer); // Attaching same object should be ignored.
+
+        yield $webserver->start();
+
+        yield $webserver->stop();
     }
 }
