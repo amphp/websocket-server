@@ -1,4 +1,4 @@
-sudo: required
+os: linux
 
 language: php
 
@@ -8,12 +8,11 @@ services:
 php:
   - 7.2
   - 7.3
-  - 7.4snapshot
+  - 7.4
   - nightly
 
-matrix:
+jobs:
   allow_failures:
-    - php: 7.4snapshot
     - php: nightly
   fast_finish: true
 
@@ -26,9 +25,7 @@ before_install:
   - phpenv config-rm xdebug.ini || echo "No xdebug config.";
 
 install:
-  - composer update -n --prefer-dist
-  - wget https://github.com/php-coveralls/php-coveralls/releases/download/v1.0.2/coveralls.phar
-  - chmod +x coveralls.phar
+  - travis_retry composer update -n --prefer-dist
 
 script:
   - phpdbg -qrr vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml
@@ -37,8 +34,9 @@ script:
   - docker run -ti --rm -v ${PWD}/test-autobahn/config:/config -v ${PWD}/test-autobahn/reports:/reports --net="host" --name fuzzingclient crossbario/autobahn-testsuite wstest -m fuzzingclient -s config/fuzzingclient.json
   - php test-autobahn/report.php
 
-after_script:
-  - ./coveralls.phar -v
+  - wget https://github.com/php-coveralls/php-coveralls/releases/download/v2.2.0/php-coveralls.phar
+  - chmod +x php-coveralls.phar
+  - travis_retry ./php-coveralls.phar -v
 
 cache:
   directories:
