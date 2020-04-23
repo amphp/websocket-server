@@ -438,23 +438,20 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
     public function onStop(HttpServer $server): Promise
     {
         return call(function () use ($server): \Generator {
-            $code = Code::GOING_AWAY;
-            $reason = 'Server shutting down!';
-
             $onStopPromises = [];
             foreach ($this->observers as $observer) {
                 \assert($observer instanceof WebsocketObserver);
                 $onStopPromises[] = $observer->onStop($server, $this);
             }
 
+            [$exceptions] = yield Promise\any($onStopPromises);
+
             $closePromises = [];
             foreach ($this->clients as $client) {
-                $closePromises[] = $client->close($code, $reason);
+                $closePromises[] = $client->close(Code::GOING_AWAY, 'Server shutting down!');
             }
 
             yield Promise\any($closePromises); // Ignore client close failures since we're shutting down anyway.
-
-            [$exceptions] = yield Promise\any($onStopPromises);
 
             if (!empty($exceptions)) {
                 throw new MultiReasonException($exceptions, 'Websocket shutdown failed');
