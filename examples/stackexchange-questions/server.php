@@ -3,7 +3,6 @@
 // Note that this example requires amphp/artax, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
-use Amp\Http\Client\HttpClient;
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
 use Amp\Http\Client\Response as ClientResponse;
@@ -35,18 +34,15 @@ Loop::run(function (): Promise {
         /** @var string|null */
         private $watcher;
 
-        /** @var HttpClient */
-        private $http;
-
         /** @var int|null */
         private $newestQuestion;
 
-        public function onStart(Endpoint $endpoint): Promise
+        public function onStart(HttpServer $server, Endpoint $endpoint): Promise
         {
-            $this->http = HttpClientBuilder::buildDefault();
-            $this->watcher = Loop::repeat(10000, function () use ($endpoint) {
+            $client = HttpClientBuilder::buildDefault();
+            $this->watcher = Loop::repeat(10000, function () use ($client, $endpoint): \Generator {
                 /** @var ClientResponse $response */
-                $response = yield $this->http->request(
+                $response = yield $client->request(
                     new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
                 );
                 $json = yield $response->getBody()->buffer();
@@ -68,7 +64,7 @@ Loop::run(function (): Promise {
             return new Success;
         }
 
-        public function onStop(Endpoint $endpoint): Promise
+        public function onStop(HttpServer $server, Endpoint $endpoint): Promise
         {
             Loop::cancel($this->watcher);
             return new Success;
