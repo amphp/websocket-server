@@ -202,8 +202,13 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
     {
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
-        // Setting via stream API doesn't seem to work...
-        if (\function_exists('socket_import_stream') && \defined('TCP_NODELAY')) {
+        // Setting via stream API doesn't work and TLS streams are not supported
+        // once TLS is enabled
+        $isNodelayChangeSupported = $socket->getTlsInfo() === null
+            && \function_exists('socket_import_stream')
+            && \defined('TCP_NODELAY');
+
+        if ($isNodelayChangeSupported) {
             $sock = \socket_import_stream($socket->getResource());
             /** @noinspection PhpComposerExtensionStubsInspection */
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
