@@ -32,13 +32,13 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
     /** @var \SplObjectStorage WebsocketObserver storage */
     private $observers;
 
-    /** @var PsrLogger */
+    /** @var PsrLogger|null */
     private $logger;
 
     /** @var Options */
     private $options;
 
-    /** @var ErrorHandler */
+    /** @var ErrorHandler|null */
     private $errorHandler;
 
     /** @var CompressionContextFactory */
@@ -84,7 +84,7 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
     public function handleRequest(Request $request): Promise
     {
-        \assert($this->logger !== null, \sprintf(
+        \assert($this->logger !== null && $this->errorHandler !== null, \sprintf(
             "Can't handle WebSocket handshake because %s::onStart() was not called by the server",
             self::class
         ));
@@ -94,6 +94,9 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
     private function respond(Request $request): \Generator
     {
+        // Ensure onStart() has been invoked and For Psalm.
+        \assert($this->logger !== null && $this->errorHandler !== null);
+
         /** @var Response $response */
         if ($request->getMethod() !== 'GET') {
             $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
@@ -163,6 +166,10 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
         $response = yield $this->clientHandler->handleHandshake($this, $request, $response);
 
+        /**
+         * @psalm-suppress DocblockTypeContradiction $response is set by ClientHandler::handleHandshake() resolution
+         *                 and may not be the correct type.
+         */
         if (!$response instanceof Response) {
             throw new \Error(\sprintf(
                 'The promise returned by %s::handleHandshake() must resolve to an instance of %s, %s returned',
@@ -181,10 +188,11 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
         $compressionContext = null;
         if ($this->options->isCompressionEnabled()) {
-            $extensions = \array_map('trim', \explode(',', $request->getHeader('sec-websocket-extensions')));
+            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
 
             foreach ($extensions as $extension) {
                 if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
+                    /** @psalm-suppress PossiblyNullArgument */
                     $response->setHeader('sec-websocket-extensions', $headerLine);
                     break;
                 }
@@ -200,6 +208,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
     private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): Promise
     {
+        \assert($this->logger !== null); // For Psalm.
+
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
         // Setting via stream API doesn't work and TLS streams are not supported
@@ -210,6 +220,7 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
         if ($isNodelayChangeSupported) {
             $sock = \socket_import_stream($socket->getResource());
+            \assert($sock !== null); // For Psalm.
             /** @noinspection PhpComposerExtensionStubsInspection */
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
@@ -229,6 +240,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
 
     private function runClient(Client $client, Request $request, Response $response): \Generator
     {
+        \assert($this->logger !== null); // For Psalm.
+
         $id = $client->getId();
         $this->clients[$id] = $client;
 
@@ -248,6 +261,7 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
                 case Code::MESSAGE_TOO_LARGE:
                 case Code::EXPECTED_EXTENSION_MISSING:
                 case Code::BAD_GATEWAY:
+                    \assert($this->logger !== null); // For Psalm.
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d): %s',
                         $code,
@@ -277,8 +291,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
-     *     generally undesirable to yield this promise in a coroutine.
+     * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
+     *                        generally undesirable to yield this promise in a coroutine.
      */
     public function broadcast(string $data, array $exceptIds = []): Promise
     {
@@ -289,6 +303,7 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
     {
         $exceptIdLookup = \array_flip($exceptIds);
 
+        /** @psalm-suppress DocblockTypeContradiction array_flip() can return null. */
         if ($exceptIdLookup === null) {
             throw new \Error('Unable to array_flip() the passed IDs');
         }
@@ -310,8 +325,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
-     *     generally undesirable to yield this promise in a coroutine.
+     * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
+     *                        generally undesirable to yield this promise in a coroutine.
      */
     public function broadcastBinary(string $data, array $exceptIds = []): Promise
     {
@@ -324,8 +339,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
-     *     generally undesirable to yield this promise in a coroutine.
+     * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
+     *                        generally undesirable to yield this promise in a coroutine.
      */
     public function multicast(string $data, array $clientIds): Promise
     {
@@ -351,8 +366,8 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return Promise<[\Throwable[], int[]]> Resolves once the message has been sent to all clients. Note it is
-     *     generally undesirable to yield this promise in a coroutine.
+     * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
+     *                        generally undesirable to yield this promise in a coroutine.
      */
     public function multicastBinary(string $data, array $clientIds): Promise
     {

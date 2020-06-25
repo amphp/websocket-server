@@ -30,6 +30,7 @@ install:
 script:
   - phpdbg -qrr vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml
   - PHP_CS_FIXER_IGNORE_ENV=1 php vendor/bin/php-cs-fixer --diff --dry-run -v fix
+  - vendor/bin/psalm
   - docker run -d --rm -v ${PWD}:/app --net="host" --name amp-websocket php:7.3 php /app/test-autobahn/server.php
   - docker run -ti --rm -v ${PWD}/test-autobahn/config:/config -v ${PWD}/test-autobahn/reports:/reports --net="host" --name fuzzingclient crossbario/autobahn-testsuite wstest -m fuzzingclient -s config/fuzzingclient.json
   - php test-autobahn/report.php
