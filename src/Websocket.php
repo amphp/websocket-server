@@ -236,7 +236,7 @@ final class Websocket implements Endpoint, RequestHandler, ServerObserver
             $id = $client->getId();
             unset($this->clients[$id]);
 
-            if (!$client->didPeerInitiateClose()) {
+            if (!$client->isClosedByPeer()) {
                 return;
             }
 
