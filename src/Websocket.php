@@ -212,15 +212,16 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
 
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
+        $socketResource = $socket->getResource();
+
         // Setting via stream API doesn't work and TLS streams are not supported
         // once TLS is enabled
-        $isNodelayChangeSupported = $socket->getTlsInfo() === null
+        $isNodelayChangeSupported = $socketResource !== null
+            && $socket->getTlsInfo() === null
             && \function_exists('socket_import_stream')
             && \defined('TCP_NODELAY');
 
-        if ($isNodelayChangeSupported) {
-            $sock = \socket_import_stream($socket->getResource());
-            \assert($sock !== null); // For Psalm.
+        if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
             /** @noinspection PhpComposerExtensionStubsInspection */
             @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
@@ -230,7 +231,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         \assert($this->logger->debug(\sprintf(
             'Upgraded %s #%d to websocket connection #%d',
             $socket->getRemoteAddress()->toString(),
-            (int) $socket->getResource(),
+            (int) $socketResource,
             $client->getId()
         )) || true);
         // @formatter:on
