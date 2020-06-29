@@ -12,7 +12,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Options;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Endpoint;
+use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Psr\Log\NullLogger;
 
@@ -27,20 +27,20 @@ Amp\Loop::run(function (): Promise {
         ->withValidateUtf8(true);
 
     $websocket = new Websocket(new class implements ClientHandler {
-        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
+        public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise
         {
             return new Success($response);
         }
 
-        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+        public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
         {
-            return Amp\call(function () use ($endpoint, $client) {
+            return Amp\call(function () use ($gateway, $client) {
                 while ($message = yield $client->receive()) {
                     \assert($message instanceof Message);
                     if ($message->isBinary()) {
-                        yield $endpoint->broadcastBinary(yield $message->buffer());
+                        yield $gateway->broadcastBinary(yield $message->buffer());
                     } else {
-                        yield $endpoint->broadcast(yield $message->buffer());
+                        yield $gateway->broadcast(yield $message->buffer());
                     }
                 }
             });

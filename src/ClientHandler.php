@@ -23,7 +23,7 @@ interface ClientHandler
      * the server error handler accessible from Endpoint::getErrorHandler() to generate
      * an error response, e.g., return $endpoint->getErrorHandler()->handleError(403).
      *
-     * @param Endpoint $endpoint The associated websocket endpoint to which the client is connecting.
+     * @param Gateway  $gateway  The associated websocket endpoint to which the client is connecting.
      * @param Request  $request  The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
@@ -31,7 +31,7 @@ interface ClientHandler
      *                           other than {@link Status::SWITCHING_PROTOCOLS} to deny the
      *                           handshake Request.
      */
-    public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise;
+    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise;
 
     /**
      * This method is called when a new websocket connection is established on the endpoint.
@@ -48,12 +48,12 @@ interface ClientHandler
      * });
      * ```
      *
-     * @param Endpoint $endpoint The associated websocket endpoint to which the client is connected.
+     * @param Gateway  $gateway  The associated websocket endpoint to which the client is connected.
      * @param Client   $client   The websocket client connection.
      * @param Request  $request  The HTTP request that instigated the connection.
      * @param Response $response The HTTP response sent to client to accept the connection.
      *
      * @return Promise<void>
      */
-    public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise;
+    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise;
 }

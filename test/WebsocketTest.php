@@ -18,7 +18,7 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Endpoint;
+use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketObserver;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -84,14 +84,14 @@ class WebsocketTest extends AsyncTestCase
                 $this->onConnect = $onConnect;
             }
 
-            public function handleHandshake(Endpoint $websocket, Request $request, Response $response): Promise
+            public function handleHandshake(Gateway $websocket, Request $request, Response $response): Promise
             {
                 return new Success($response);
             }
 
-            public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+            public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
             {
-                return call($this->onConnect, $endpoint, $client);
+                return call($this->onConnect, $gateway, $client);
             }
         }, null, null, $factory);
 
@@ -115,7 +115,7 @@ class WebsocketTest extends AsyncTestCase
 
         $clientHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
-            ->willReturnCallback(function (Endpoint $endpoint, Request $request, Response $response): Promise {
+            ->willReturnCallback(function (Gateway $endpoint, Request $request, Response $response): Promise {
                 return new Success($response);
             });
 

@@ -24,7 +24,7 @@ use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 use function Amp\Websocket\generateAcceptFromKey;
 
-final class Websocket implements Endpoint, RequestHandler, ServerObserver
+final class Websocket implements Gateway, RequestHandler, ServerObserver
 {
     /** @var ClientHandler */
     private $clientHandler;

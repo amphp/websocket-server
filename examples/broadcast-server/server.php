@@ -18,7 +18,7 @@ use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Endpoint;
+use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -27,21 +27,21 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
     $websocket = new Websocket(new class implements ClientHandler {
-        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
+        public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-                return $endpoint->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
+                return $gateway->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
             }
 
             return new Success($response);
         }
 
-        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+        public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
         {
-            return Amp\call(function () use ($endpoint, $client) {
+            return Amp\call(function () use ($gateway, $client) {
                 while ($message = yield $client->receive()) {
                     \assert($message instanceof Message);
-                    $endpoint->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
+                    $gateway->broadcast(\sprintf('%d: %s', $client->getId(), yield $message->buffer()));
                 }
             });
         }

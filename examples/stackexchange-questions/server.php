@@ -20,7 +20,7 @@ use Amp\Socket\Server as SocketServer;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Endpoint;
+use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketObserver;
 use Monolog\Logger;
@@ -37,10 +37,10 @@ Loop::run(function (): Promise {
         /** @var int|null */
         private $newestQuestion;
 
-        public function onStart(HttpServer $server, Endpoint $endpoint): Promise
+        public function onStart(HttpServer $server, Gateway $gateway): Promise
         {
             $client = HttpClientBuilder::buildDefault();
-            $this->watcher = Loop::repeat(10000, function () use ($client, $endpoint): \Generator {
+            $this->watcher = Loop::repeat(10000, function () use ($client, $gateway): \Generator {
                 /** @var ClientResponse $response */
                 $response = yield $client->request(
                     new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
@@ -56,7 +56,7 @@ Loop::run(function (): Promise {
                 foreach (\array_reverse($data['items']) as $question) {
                     if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
                         $this->newestQuestion = $question['question_id'];
-                        $endpoint->broadcast(\json_encode($question));
+                        $gateway->broadcast(\json_encode($question));
                     }
                 }
             });
@@ -64,22 +64,22 @@ Loop::run(function (): Promise {
             return new Success;
         }
 
-        public function onStop(HttpServer $server, Endpoint $endpoint): Promise
+        public function onStop(HttpServer $server, Gateway $gateway): Promise
         {
             Loop::cancel($this->watcher);
             return new Success;
         }
 
-        public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
+        public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise
         {
             if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-                return $endpoint->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
+                return $gateway->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
             }
 
             return new Success($response);
         }
 
-        public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+        public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
         {
             return call(function () use ($client) {
                 while ($message = yield $client->receive()) {
