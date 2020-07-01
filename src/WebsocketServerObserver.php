@@ -5,7 +5,7 @@ namespace Amp\Websocket\Server;
 use Amp\Http\Server\HttpServer;
 use Amp\Promise;
 
-interface WebsocketObserver
+interface WebsocketServerObserver
 {
     /**
      * Called when the HTTP server is started. If an instance of WebsocketObserver is attached to multiple

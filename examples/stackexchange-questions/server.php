@@ -22,7 +22,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
-use Amp\Websocket\Server\WebsocketObserver;
+use Amp\Websocket\Server\WebsocketServerObserver;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 use function Amp\call;
@@ -30,7 +30,7 @@ use function Amp\call;
 require __DIR__ . '/../../vendor/autoload.php';
 
 Loop::run(function (): Promise {
-    $websocket = new Websocket(new class implements ClientHandler, WebsocketObserver {
+    $websocket = new Websocket(new class implements ClientHandler, WebsocketServerObserver {
         /** @var string|null */
         private $watcher;
 

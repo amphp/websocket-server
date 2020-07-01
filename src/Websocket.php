@@ -69,15 +69,15 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         $this->compressionFactory = $compressionFactory ?? new Rfc7692CompressionFactory;
         $this->clientFactory = $clientFactory ?? new Rfc6455ClientFactory;
 
-        if ($this->clientHandler instanceof WebsocketObserver) {
+        if ($this->clientHandler instanceof WebsocketServerObserver) {
             $this->observers->attach($this->clientHandler);
         }
 
-        if ($this->clientFactory instanceof WebsocketObserver) {
+        if ($this->clientFactory instanceof WebsocketServerObserver) {
             $this->observers->attach($this->clientFactory);
         }
 
-        if ($this->compressionFactory instanceof WebsocketObserver) {
+        if ($this->compressionFactory instanceof WebsocketServerObserver) {
             $this->observers->attach($this->compressionFactory);
         }
     }
@@ -418,9 +418,9 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
     /**
      * Attaches a WebsocketObserver that is notified when the server starts and stops.
      *
-     * @param WebsocketObserver $observer
+     * @param WebsocketServerObserver $observer
      */
-    public function attach(WebsocketObserver $observer): void
+    public function attach(WebsocketServerObserver $observer): void
     {
         $this->observers->attach($observer);
     }
@@ -441,7 +441,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         return call(function () use ($server): \Generator {
             $onStartPromises = [];
             foreach ($this->observers as $observer) {
-                \assert($observer instanceof WebsocketObserver);
+                \assert($observer instanceof WebsocketServerObserver);
                 $onStartPromises[] = $observer->onStart($server, $this);
             }
 
@@ -461,7 +461,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         return call(function () use ($server): \Generator {
             $onStopPromises = [];
             foreach ($this->observers as $observer) {
-                \assert($observer instanceof WebsocketObserver);
+                \assert($observer instanceof WebsocketServerObserver);
                 $onStopPromises[] = $observer->onStop($server, $this);
             }
 

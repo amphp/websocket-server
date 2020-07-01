@@ -20,7 +20,7 @@ use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
-use Amp\Websocket\Server\WebsocketObserver;
+use Amp\Websocket\Server\WebsocketServerObserver;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
@@ -297,7 +297,7 @@ class WebsocketTest extends AsyncTestCase
 
         $webserver = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
 
-        $observer = $this->createMock(WebsocketObserver::class);
+        $observer = $this->createMock(WebsocketServerObserver::class);
         $observer->expects($this->once())
             ->method('onStart')
             ->willReturn(new Success);
