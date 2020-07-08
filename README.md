@@ -40,12 +40,12 @@ use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Loop;
 use Amp\Promise;
-use Amp\Socket\Server as SocketServer;
+use Amp\Socket\Server;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Endpoint;
+use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -60,21 +60,21 @@ $websocket = new Websocket(new class implements ClientHandler {
         'http://[::1]:1337'
     ];
     
-    public function handleHandshake(Endpoint $endpoint, Request $request, Response $response): Promise
+    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), self::ALLOWED_ORIGINS, true)) {
-            return $endpoint->getErrorHandler()->handleError(403);
+            return $gateway->getErrorHandler()->handleError(403);
         }
 
         return new Success($response);
     }
 
-    public function handleClient(Endpoint $endpoint, Client $client, Request $request, Response $response): Promise
+    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
     {
-        return call(function () use ($endpoint, $client): \Generator {
+        return call(function () use ($gateway, $client): \Generator {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
-                $endpoint->broadcast(\sprintf(
+                $gateway->broadcast(\sprintf(
                     '%d: %s',
                     $client->getId(),
                     yield $message->buffer()
@@ -86,8 +86,8 @@ $websocket = new Websocket(new class implements ClientHandler {
 
 Loop::run(function () use ($websocket): Promise {
     $sockets = [
-        SocketServer::listen('127.0.0.1:1337'),
-        SocketServer::listen('[::1]:1337'),
+        Server::listen('127.0.0.1:1337'),
+        Server::listen('[::1]:1337'),
     ];
 
     $router = new Router;
