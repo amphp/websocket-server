@@ -17,7 +17,7 @@ interface Gateway
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
-     *                        generally undesirable to yield this promise in a coroutine.
+     *                        generally undesirable to await this promise in a coroutine.
      */
     public function broadcast(string $data, array $exceptIds = []): Promise;
 
@@ -28,7 +28,7 @@ interface Gateway
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
      * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
-     *                        generally undesirable to yield this promise in a coroutine.
+     *                        generally undesirable to await this promise in a coroutine.
      */
     public function broadcastBinary(string $data, array $exceptIds = []): Promise;
 
@@ -39,7 +39,7 @@ interface Gateway
      * @param int[]  $clientIds Array of client IDs.
      *
      * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
-     *                        generally undesirable to yield this promise in a coroutine.
+     *                        generally undesirable to await this promise in a coroutine.
      */
     public function multicast(string $data, array $clientIds): Promise;
 
@@ -50,7 +50,7 @@ interface Gateway
      * @param int[]  $clientIds Array of client IDs.
      *
      * @return Promise<array> Resolves once the message has been sent to all clients. Note it is
-     *                        generally undesirable to yield this promise in a coroutine.
+     *                        generally undesirable to await this promise in a coroutine.
      */
     public function multicastBinary(string $data, array $clientIds): Promise;
 

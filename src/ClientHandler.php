@@ -4,7 +4,6 @@ namespace Amp\Websocket\Server;
 
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Promise;
 use Amp\Websocket\Client;
 
 interface ClientHandler
@@ -27,11 +26,10 @@ interface ClientHandler
      * @param Request  $request  The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
-     * @return Promise<Response> Resolve the Promise with a Response set to a status code
-     *                           other than {@link Status::SWITCHING_PROTOCOLS} to deny the
-     *                           handshake Request.
+     * @return Response Return a Response with a status code other tha {@link Status::SWITCHING_PROTOCOLS} to deny the
+     *                  handshake Request.
      */
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise;
+    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response;
 
     /**
      * This method is called when a new websocket connection is established on the endpoint.
@@ -40,20 +38,16 @@ interface ClientHandler
      * this method resolves.
      *
      * ```
-     * return Amp\call(function () use ($client) {
-     *     while ($message = yield $client->receive()) {
-     *         $payload = yield $message->buffer();
-     *         yield $client->send('Message of length ' . \strlen($payload) . 'received');
-     *     }
-     * });
+     * while ($message = $client->receive()) {
+     *     $payload = $message->buffer();
+     *     await($client->send('Message of length ' . strlen($payload) . 'received'));
+     * }
      * ```
      *
      * @param Gateway  $gateway  The associated websocket endpoint to which the client is connected.
      * @param Client   $client   The websocket client connection.
      * @param Request  $request  The HTTP request that instigated the connection.
      * @param Response $response The HTTP response sent to client to accept the connection.
-     *
-     * @return Promise<void>
      */
-    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise;
+    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void;
 }

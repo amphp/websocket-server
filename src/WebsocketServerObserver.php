@@ -3,7 +3,6 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Http\Server\HttpServer;
-use Amp\Promise;
 
 interface WebsocketServerObserver
 {
@@ -13,10 +12,8 @@ interface WebsocketServerObserver
      *
      * @param HttpServer $server
      * @param Gateway    $gateway
-     *
-     * @return Promise<void>
      */
-    public function onStart(HttpServer $server, Gateway $gateway): Promise;
+    public function onStart(HttpServer $server, Gateway $gateway): void;
 
     /**
      * Called when the HTTP server is stopped. If an instance of WebsocketServerObserver is attached to multiple
@@ -24,8 +21,6 @@ interface WebsocketServerObserver
      *
      * @param HttpServer $server
      * @param Gateway    $gateway
-     *
-     * @return Promise<void>
      */
-    public function onStop(HttpServer $server, Gateway $gateway): Promise;
+    public function onStop(HttpServer $server, Gateway $gateway): void;
 }

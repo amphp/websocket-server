@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket\Server;
 
-use Amp\Coroutine;
 use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\HttpServer;
@@ -21,34 +20,29 @@ use Amp\Websocket\CompressionContextFactory;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
-use function Amp\call;
+use function Amp\async;
+use function Amp\await;
+use function Amp\defer;
 use function Amp\Websocket\generateAcceptFromKey;
 
 final class Websocket implements Gateway, RequestHandler, ServerObserver
 {
-    /** @var ClientHandler */
-    private $clientHandler;
+    private ClientHandler $clientHandler;
 
-    /** @var \SplObjectStorage WebsocketObserver storage */
-    private $observers;
+    private \SplObjectStorage $observers;
 
-    /** @var PsrLogger|null */
-    private $logger;
+    private PsrLogger $logger;
 
-    /** @var Options */
-    private $options;
+    private Options $options;
 
-    /** @var ErrorHandler|null */
-    private $errorHandler;
+    private ErrorHandler $errorHandler;
 
-    /** @var CompressionContextFactory */
-    private $compressionFactory;
+    private CompressionContextFactory $compressionFactory;
 
-    /** @var ClientFactory */
-    private $clientFactory;
+    private ClientFactory $clientFactory;
 
     /** @var Client[] Indexed by client ID. */
-    private $clients = [];
+    private array $clients = [];
 
     /**
      * @param ClientHandler                  $clientHandler
@@ -82,36 +76,27 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         }
     }
 
-    public function handleRequest(Request $request): Promise
+    public function handleRequest(Request $request): Response
     {
-        \assert($this->logger !== null && $this->errorHandler !== null, \sprintf(
+        \assert(isset($this->logger) && isset($this->errorHandler), \sprintf(
             "Can't handle WebSocket handshake because %s::onStart() was not called by the server",
             self::class
         ));
 
-        return new Coroutine($this->respond($request));
-    }
-
-    private function respond(Request $request): \Generator
-    {
-        // Ensure onStart() has been invoked and For Psalm.
-        \assert($this->logger !== null && $this->errorHandler !== null);
-
-        /** @var Response $response */
         if ($request->getMethod() !== 'GET') {
-            $response = yield $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
+            $response = $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
             $response->setHeader('allow', 'GET');
             return $response;
         }
 
         if ($request->getProtocolVersion() !== '1.1') {
-            $response = yield $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
+            $response = $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
             $response->setHeader('upgrade', 'websocket');
             return $response;
         }
 
-        if ('' !== yield $request->getBody()->buffer()) {
-            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
+        if ('' !== $request->getBody()->buffer()) {
+            return $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
         }
 
         $hasUpgradeWebsocket = false;
@@ -122,7 +107,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             }
         }
         if (!$hasUpgradeWebsocket) {
-            $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
+            $response = $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
             $response->setHeader('upgrade', 'websocket');
             return $response;
         }
@@ -141,19 +126,19 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
 
         if (!$hasConnectionUpgrade) {
             $reason = 'Bad Request: "Connection: Upgrade" header required';
-            $response = yield $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
+            $response = $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, $reason, $request);
             $response->setHeader('upgrade', 'websocket');
             return $response;
         }
 
         if (!$acceptKey = $request->getHeader('sec-websocket-key')) {
             $reason = 'Bad Request: "Sec-Websocket-Key" header required';
-            return yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
+            return $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
         }
 
         if (!\in_array('13', $request->getHeaderArray('sec-websocket-version'), true)) {
             $reason = 'Bad Request: Requested Websocket version unavailable';
-            $response = yield $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
+            $response = $this->errorHandler->handleError(Status::BAD_REQUEST, $reason, $request);
             $response->setHeader('sec-websocket-version', '13');
             return $response;
         }
@@ -164,20 +149,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             'sec-websocket-accept' => generateAcceptFromKey($acceptKey),
         ]);
 
-        $response = yield $this->clientHandler->handleHandshake($this, $request, $response);
-
-        /**
-         * @psalm-suppress DocblockTypeContradiction $response is set by ClientHandler::handleHandshake() resolution
-         *                 and may not be the correct type.
-         */
-        if (!$response instanceof Response) {
-            throw new \Error(\sprintf(
-                'The promise returned by %s::handleHandshake() must resolve to an instance of %s, %s returned',
-                \str_replace("\0", '@', \get_class($this)), // replace NUL-byte in anonymous class name
-                Response::class,
-                \is_object($response) ? 'instance of ' . \get_class($response) : \gettype($response)
-            ));
-        }
+        $response = $this->clientHandler->handleHandshake($this, $request, $response);
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
             $response->removeHeader('connection');
@@ -199,16 +171,14 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             }
         }
 
-        $response->upgrade(function (UpgradedSocket $socket) use ($request, $response, $compressionContext): Promise {
-            return $this->reapClient($socket, $request, $response, $compressionContext);
-        });
+        $response->upgrade(fn(UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
 
         return $response;
     }
 
-    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): Promise
+    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
     {
-        \assert($this->logger !== null); // For Psalm.
+        \assert(isset($this->logger)); // For Psalm.
 
         $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
 
@@ -236,12 +206,12 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         )) || true);
         // @formatter:on
 
-        return new Coroutine($this->runClient($client, $request, $response));
+        defer(fn() => $this->runClient($client, $request, $response));
     }
 
-    private function runClient(Client $client, Request $request, Response $response): \Generator
+    private function runClient(Client $client, Request $request, Response $response): void
     {
-        \assert($this->logger !== null); // For Psalm.
+        \assert(isset($this->logger)); // For Psalm.
 
         $id = $client->getId();
         $this->clients[$id] = $client;
@@ -262,7 +232,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
                 case Code::MESSAGE_TOO_LARGE:
                 case Code::EXPECTED_EXTENSION_MISSING:
                 case Code::BAD_GATEWAY:
-                    \assert($this->logger !== null); // For Psalm.
+                    \assert(isset($this->logger)); // For Psalm.
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d): %s',
                         $code,
@@ -272,7 +242,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         });
 
         try {
-            yield $this->clientHandler->handleClient($this, $client, $request, $response);
+            $this->clientHandler->handleClient($this, $client, $request, $response);
         } catch (ClosedException $exception) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
@@ -388,7 +358,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
      */
     public function getLogger(): PsrLogger
     {
-        if ($this->logger === null) {
+        if (!isset($this->logger)) {
             throw new \Error('Cannot get logger until the server has started');
         }
 
@@ -400,7 +370,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
      */
     public function getErrorHandler(): ErrorHandler
     {
-        if ($this->errorHandler === null) {
+        if (!isset($this->errorHandler)) {
             throw new \Error('Cannot get error handler until the server has started');
         }
 
@@ -428,7 +398,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
     /**
      * @inheritDoc
      */
-    public function onStart(HttpServer $server): Promise
+    public function onStart(HttpServer $server): void
     {
         $this->logger = $server->getLogger();
         $this->errorHandler = $server->getErrorHandler();
@@ -438,45 +408,41 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
         }
 
-        return call(function () use ($server): \Generator {
-            $onStartPromises = [];
-            foreach ($this->observers as $observer) {
-                \assert($observer instanceof WebsocketServerObserver);
-                $onStartPromises[] = $observer->onStart($server, $this);
-            }
+        $onStartPromises = [];
+        foreach ($this->observers as $observer) {
+            \assert($observer instanceof WebsocketServerObserver);
+            $onStartPromises[] = async(fn() => $observer->onStart($server, $this));
+        }
 
-            [$exceptions] = yield Promise\any($onStartPromises);
+        [$exceptions] = await(Promise\any($onStartPromises));
 
-            if (!empty($exceptions)) {
-                throw new MultiReasonException($exceptions, 'Websocket initialization failed');
-            }
-        });
+        if (!empty($exceptions)) {
+            throw new MultiReasonException($exceptions, 'Websocket initialization failed');
+        }
     }
 
     /**
      * @inheritDoc
      */
-    public function onStop(HttpServer $server): Promise
+    public function onStop(HttpServer $server): void
     {
-        return call(function () use ($server): \Generator {
-            $onStopPromises = [];
-            foreach ($this->observers as $observer) {
-                \assert($observer instanceof WebsocketServerObserver);
-                $onStopPromises[] = $observer->onStop($server, $this);
-            }
+        $onStopPromises = [];
+        foreach ($this->observers as $observer) {
+            \assert($observer instanceof WebsocketServerObserver);
+            $onStopPromises[] = async(fn() => $observer->onStop($server, $this));
+        }
 
-            [$exceptions] = yield Promise\any($onStopPromises);
+        [$exceptions] = await(Promise\any($onStopPromises));
 
-            $closePromises = [];
-            foreach ($this->clients as $client) {
-                $closePromises[] = $client->close(Code::GOING_AWAY, 'Server shutting down!');
-            }
+        $closePromises = [];
+        foreach ($this->clients as $client) {
+            $closePromises[] = async(fn() => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
+        }
 
-            yield Promise\any($closePromises); // Ignore client close failures since we're shutting down anyway.
+        await(Promise\any($closePromises)); // Ignore client close failures since we're shutting down anyway.
 
-            if (!empty($exceptions)) {
-                throw new MultiReasonException($exceptions, 'Websocket shutdown failed');
-            }
-        });
+        if (!empty($exceptions)) {
+            throw new MultiReasonException($exceptions, 'Websocket shutdown failed');
+        }
     }
 }
