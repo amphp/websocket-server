@@ -59,8 +59,8 @@ $server = new HttpServer($sockets, $router, $logger);
 
 $server->start();
 
-// Await SIGINT, SIGTERM, or SIGSTOP to be received.
-$signal = Amp\signal(\SIGINT, \SIGTERM, \SIGSTOP);
+// Await SIGINT or SIGTERM to be received.
+$signal = Amp\trap(\SIGINT, \SIGTERM);
 
 $logger->info(\sprintf("Received signal %d, stopping HTTP server", $signal));
 
