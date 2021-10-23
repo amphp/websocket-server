@@ -13,7 +13,7 @@ use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Psr\Log\NullLogger;
-use function Amp\await;
+use Revolt\EventLoop;
 
 /* --- http://localhost:9001/ ------------------------------------------------------------------- */
 
@@ -35,9 +35,9 @@ $websocket = new Websocket(new class implements ClientHandler {
         while ($message = $client->receive()) {
             \assert($message instanceof Message);
             if ($message->isBinary()) {
-                await($gateway->broadcastBinary($message->buffer()));
+                $gateway->broadcastBinary($message->buffer())->await();
             } else {
-                await($gateway->broadcast($message->buffer()));
+                $gateway->broadcast($message->buffer())->await();
             }
         }
     }
@@ -47,6 +47,6 @@ $server = new HttpServer([Server::listen("127.0.0.1:9001")], $websocket, new Nul
 
 $server->start();
 
-$signal = Amp\signal(\SIGINT, \SIGTERM, \SIGSTOP);
+$signal = Amp\trapSignal([\SIGINT, \SIGTERM, \SIGSTOP]);
 
 $server->stop();

@@ -60,7 +60,7 @@ $server = new HttpServer($sockets, $router, $logger);
 $server->start();
 
 // Await SIGINT or SIGTERM to be received.
-$signal = Amp\trap(\SIGINT, \SIGTERM);
+$signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
 
 $logger->info(\sprintf("Received signal %d, stopping HTTP server", $signal));
 

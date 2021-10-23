@@ -4,6 +4,7 @@ namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
 use Amp\Deferred;
+use Amp\Future;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\HttpServer;
@@ -22,8 +23,7 @@ use Amp\Websocket\Server\WebsocketServerObserver;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
-use function Amp\async;
-use function Amp\defer;
+use Revolt\EventLoop;
 
 class WebsocketTest extends AsyncTestCase
 {
@@ -43,8 +43,7 @@ class WebsocketTest extends AsyncTestCase
             $server,
             $factory,
             function (Websocket $websocket, Client $client) use ($onConnect, $deferred): void {
-                $promise = async($onConnect, $websocket, $client);
-                $deferred->resolve($promise);
+                $deferred->complete($onConnect($websocket, $client));
             }
         );
 
@@ -56,12 +55,12 @@ class WebsocketTest extends AsyncTestCase
         $request = $this->createRequest();
         $socket->write($this->writeRequest($request));
 
-        defer(function () use ($socket): void {
+        EventLoop::queue(function () use ($socket): void {
             while (null !== $socket->read());
         });
 
         try {
-            $deferred->promise();
+            $deferred->getFuture()->await();
         } finally {
             $webserver->stop();
             $socket->close();
@@ -163,7 +162,7 @@ class WebsocketTest extends AsyncTestCase
 
         // 0 ----- valid Handshake request -------------------------------------------------------->
         $request = $this->createRequest();
-        $testCases[] = [$request, Status::SWITCHING_PROTOCOLS, [
+        $testCases['Valid'] = [$request, Status::SWITCHING_PROTOCOLS, [
             "upgrade" => ["websocket"],
             "connection" => ["upgrade"],
             "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
@@ -172,37 +171,37 @@ class WebsocketTest extends AsyncTestCase
         // 1 ----- error conditions: Handshake with POST method ----------------------------------->
         $request = $this->createRequest();
         $request->setMethod("POST");
-        $testCases[] = [$request, Status::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
+        $testCases['POST'] = [$request, Status::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
 
         // 2 ----- error conditions: Handshake with 1.0 protocol ---------------------------------->
         $request = $this->createRequest();
         $request->setProtocolVersion("1.0");
-        $testCases[] = [$request, Status::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
+        $testCases['HTTP/1.0 Protocol'] = [$request, Status::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
         $request = $this->createRequest();
         $request->setBody(new ByteStream\InMemoryStream("Non-empty body"));
-        $testCases[] = [$request, Status::BAD_REQUEST];
+        $testCases['Non-empty Body'] = [$request, Status::BAD_REQUEST];
 
         // 4 ----- error conditions: Upgrade: Websocket header required --------------------------->
         $request = $this->createRequest();
         $request->setHeader("upgrade", "no websocket!");
-        $testCases[] = [$request, Status::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
+        $testCases['No Upgrade Header'] = [$request, Status::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
 
         // 5 ----- error conditions: Connection: Upgrade header required -------------------------->
         $request = $this->createRequest();
         $request->setHeader("connection", "no upgrade!");
-        $testCases[] = [$request, Status::UPGRADE_REQUIRED];
+        $testCases['No Connection Header'] = [$request, Status::UPGRADE_REQUIRED];
 
         // 6 ----- error conditions: Sec-Websocket-Key header required ---------------------------->
         $request = $this->createRequest();
         $request->removeHeader("sec-websocket-key");
-        $testCases[] = [$request, Status::BAD_REQUEST];
+        $testCases['No Sec-websocket-key Header'] = [$request, Status::BAD_REQUEST];
 
         // 7 ----- error conditions: Sec-Websocket-Version header must be 13 ---------------------->
         $request = $this->createRequest();
         $request->setHeader("sec-websocket-version", "12");
-        $testCases[] = [$request, Status::BAD_REQUEST, ["sec-websocket-version" => ["13"]]];
+        $testCases['Invalid Sec-websocket-version Header'] = [$request, Status::BAD_REQUEST, ["sec-websocket-version" => ["13"]]];
 
         return $testCases;
     }
@@ -214,14 +213,16 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
-            ->with('Text');
+            ->with('Text')
+            ->willReturn(Future::complete(null));
         $client->expects($this->once())
             ->method('sendBinary')
-            ->with('Binary');
+            ->with('Binary')
+            ->willReturn(Future::complete(null));
 
         $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->broadcast('Text');
-            $websocket->broadcastBinary('Binary');
+            $websocket->broadcast('Text')->await();
+            $websocket->broadcastBinary('Binary')->await();
         }, $client);
     }
 
@@ -231,15 +232,13 @@ class WebsocketTest extends AsyncTestCase
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->never())
-            ->method('send')
-            ->with('Text');
+            ->method('send');
         $client->expects($this->never())
-            ->method('sendBinary')
-            ->with('Binary');
+            ->method('sendBinary');
 
         $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->broadcast('Text', [$client->getId()]);
-            $websocket->broadcastBinary('Binary', [$client->getId()]);
+            $websocket->broadcast('Text', [$client->getId()])->await();
+            $websocket->broadcastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
 
@@ -250,14 +249,16 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
-            ->with('Text');
+            ->with('Text')
+            ->willReturn(Future::complete(null));
         $client->expects($this->once())
             ->method('sendBinary')
-            ->with('Binary');
+            ->with('Binary')
+            ->willReturn(Future::complete(null));
 
         $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->multicast('Text', [$client->getId()]);
-            $websocket->multicastBinary('Binary', [$client->getId()]);
+            $websocket->multicast('Text', [$client->getId()])->await();
+            $websocket->multicastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
 

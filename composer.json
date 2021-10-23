@@ -43,7 +43,7 @@
         "amphp/phpunit-util": "^2-dev",
         "league/climate": "^3",
         "phpunit/phpunit": "^9",
-        "psalm/phar": "^3.11@dev"
+        "psalm/phar": "^4.10"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

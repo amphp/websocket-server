@@ -13,7 +13,6 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Status;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
-use Amp\Loop;
 use Amp\Socket\Server as SocketServer;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
@@ -21,6 +20,7 @@ use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketServerObserver;
 use Monolog\Logger;
+use Revolt\EventLoop;
 use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
@@ -32,7 +32,7 @@ $websocket = new Websocket(new class implements ClientHandler, WebsocketServerOb
     public function onStart(HttpServer $server, Gateway $gateway): void
     {
         $client = HttpClientBuilder::buildDefault();
-        $this->watcher = Loop::repeat(10000, Amp\asyncCallable(function () use ($client, $gateway): void {
+        $this->watcher = EventLoop::repeat(10, function () use ($client, $gateway): void {
             $response = $client->request(
                 new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
             );
@@ -50,12 +50,12 @@ $websocket = new Websocket(new class implements ClientHandler, WebsocketServerOb
                     $gateway->broadcast(\json_encode($question));
                 }
             }
-        }));
+        });
     }
 
     public function onStop(HttpServer $server, Gateway $gateway): void
     {
-        Loop::cancel($this->watcher);
+        EventLoop::cancel($this->watcher);
     }
 
     public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
@@ -94,7 +94,7 @@ $server = new HttpServer($sockets, $router, $logger);
 $server->start();
 
 // Await SIGINT or SIGTERM to be received.
-$signal = Amp\trap(\SIGINT, \SIGTERM);
+$signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
 
 $logger->info(\sprintf("Received signal %d, stopping HTTP server", $signal));
 
