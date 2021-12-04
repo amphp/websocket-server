@@ -21,7 +21,7 @@ use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
-use function Amp\coroutine;
+use function Amp\async;
 use function Amp\Websocket\generateAcceptFromKey;
 
 final class Websocket implements Gateway, RequestHandler, ServerObserver
@@ -286,7 +286,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             $futures[] = $binary ? $client->sendBinary($data) : $client->send($data);
         }
 
-        return coroutine(static fn () => Future\settle($futures));
+        return async(static fn () => Future\settle($futures));
     }
 
     /**
@@ -327,7 +327,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             $client = $this->clients[$id];
             $futures[] = $binary ? $client->sendBinary($data) : $client->send($data);
         }
-        return coroutine(static fn () => Future\settle($futures));
+        return async(static fn () => Future\settle($futures));
     }
 
     /**
@@ -410,7 +410,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         $onStartFutures = [];
         foreach ($this->observers as $observer) {
             \assert($observer instanceof WebsocketServerObserver);
-            $onStartFutures[] = coroutine(fn() => $observer->onStart($server, $this));
+            $onStartFutures[] = async(fn() => $observer->onStart($server, $this));
         }
 
         [$exceptions] = Future\settle($onStartFutures);
@@ -428,14 +428,14 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         $onStopFutures = [];
         foreach ($this->observers as $observer) {
             \assert($observer instanceof WebsocketServerObserver);
-            $onStopFutures[] = coroutine(fn() => $observer->onStop($server, $this));
+            $onStopFutures[] = async(fn() => $observer->onStop($server, $this));
         }
 
         [$exceptions] = Future\settle($onStopFutures);
 
         $closeFutures = [];
         foreach ($this->clients as $client) {
-            $closeFutures[] = coroutine(fn() => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
+            $closeFutures[] = async(fn() => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
         }
 
         Future\settle($closeFutures); // Ignore client close failures since we're shutting down anyway.

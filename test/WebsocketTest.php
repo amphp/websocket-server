@@ -3,7 +3,7 @@
 namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
-use Amp\Deferred;
+use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
@@ -37,7 +37,7 @@ class WebsocketTest extends AsyncTestCase
 
         $server = Server::listen("127.0.0.1:0");
 
-        $deferred = new Deferred;
+        $deferred = new DeferredFuture;
 
         $webserver = $this->createWebsocketServer(
             $server,
