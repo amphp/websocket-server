@@ -5,7 +5,7 @@ require \dirname(__DIR__) . "/vendor/autoload.php";
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Socket\Server;
+use Amp\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
 use Amp\Websocket\Options;
@@ -13,7 +13,6 @@ use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
 use Psr\Log\NullLogger;
-use Revolt\EventLoop;
 
 /* --- http://localhost:9001/ ------------------------------------------------------------------- */
 
@@ -43,7 +42,7 @@ $websocket = new Websocket(new class implements ClientHandler {
     }
 }, $options);
 
-$server = new HttpServer([Server::listen("127.0.0.1:9001")], $websocket, new NullLogger);
+$server = new HttpServer([Socket\listen("127.0.0.1:9001")], $websocket, new NullLogger);
 
 $server->start();
 

@@ -13,7 +13,7 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Status;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
-use Amp\Socket\Server as SocketServer;
+use Amp\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
@@ -76,8 +76,8 @@ $websocket = new Websocket(new class implements ClientHandler, WebsocketServerOb
 });
 
 $sockets = [
-    SocketServer::listen('127.0.0.1:1337'),
-    SocketServer::listen('[::1]:1337'),
+    Socket\listen('127.0.0.1:1337'),
+    Socket\listen('[::1]:1337'),
 ];
 
 $router = new Router;
