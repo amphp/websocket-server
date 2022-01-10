@@ -40,7 +40,7 @@
         "amphp/http-server-router": "^2-dev",
         "amphp/log": "^2-dev",
         "amphp/php-cs-fixer-config": "dev-master",
-        "amphp/phpunit-util": "^2-dev",
+        "amphp/phpunit-util": "^3-dev",
         "league/climate": "^3",
         "phpunit/phpunit": "^9",
         "psalm/phar": "^4.10"
