@@ -41,8 +41,8 @@ class WebsocketTest extends AsyncTestCase
         $webserver = $this->createWebsocketServer(
             $server,
             $factory,
-            function (Websocket $websocket, Client $client) use ($onConnect, $deferred): void {
-                $deferred->complete($onConnect($websocket, $client));
+            function (Gateway $gateway, Client $client) use ($onConnect, $deferred): void {
+                $deferred->complete($onConnect($gateway, $client));
             }
         );
 
@@ -222,9 +222,9 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isConnected')
             ->willReturn(true);
 
-        $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->broadcast('Text')->await();
-            $websocket->broadcastBinary('Binary')->await();
+        $this->execute(function (Gateway $gateway, Client $client) {
+            $gateway->broadcast('Text')->await();
+            $gateway->broadcastBinary('Binary')->await();
         }, $client);
     }
 
@@ -240,9 +240,9 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isConnected')
             ->willReturn(true);
 
-        $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->broadcast('Text', [$client->getId()])->await();
-            $websocket->broadcastBinary('Binary', [$client->getId()])->await();
+        $this->execute(function (Gateway $gateway, Client $client) {
+            $gateway->broadcast('Text', [$client->getId()])->await();
+            $gateway->broadcastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
 
@@ -260,9 +260,9 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isConnected')
             ->willReturn(true);
 
-        $this->execute(function (Websocket $websocket, Client $client) {
-            $websocket->multicast('Text', [$client->getId()])->await();
-            $websocket->multicastBinary('Binary', [$client->getId()])->await();
+        $this->execute(function (Gateway $gateway, Client $client) {
+            $gateway->multicast('Text', [$client->getId()])->await();
+            $gateway->multicastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
 
