@@ -4,7 +4,6 @@ namespace Amp\Websocket\Server\Test;
 
 use Amp\ByteStream;
 use Amp\DeferredFuture;
-use Amp\Future;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\HttpServer;
@@ -13,7 +12,7 @@ use Amp\Http\Server\Response;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
-use Amp\Socket\Server;
+use Amp\Socket\SocketServer;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
@@ -35,7 +34,7 @@ class WebsocketTest extends AsyncTestCase
         $factory->method('createClient')
             ->willReturn($client);
 
-        $server = Server::listen("127.0.0.1:0");
+        $server = Socket\listen("127.0.0.1:0");
 
         $deferred = new DeferredFuture;
 
@@ -67,8 +66,11 @@ class WebsocketTest extends AsyncTestCase
         }
     }
 
-    protected function createWebsocketServer(Server $server, ClientFactory $factory, callable $onConnect): HttpServer
-    {
+    protected function createWebsocketServer(
+        SocketServer $server,
+        ClientFactory $factory,
+        callable $onConnect
+    ): HttpServer {
         $websocket = new Websocket(new class($onConnect) implements ClientHandler {
             private $onConnect;
 
@@ -114,7 +116,7 @@ class WebsocketTest extends AsyncTestCase
 
         $websocket = new Websocket($clientHandler);
 
-        $server = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
+        $server = new HttpServer([Socket\listen('127.0.0.1:0')], $websocket, new NullLogger);
         $server->start();
 
         try {
@@ -180,7 +182,7 @@ class WebsocketTest extends AsyncTestCase
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
         $request = $this->createRequest();
-        $request->setBody(new ByteStream\InMemoryStream("Non-empty body"));
+        $request->setBody(new ByteStream\ReadableBuffer("Non-empty body"));
         $testCases['Non-empty Body'] = [$request, Status::BAD_REQUEST];
 
         // 4 ----- error conditions: Upgrade: Websocket header required --------------------------->
@@ -213,12 +215,12 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
-            ->with('Text')
-            ->willReturn(Future::complete(null));
+            ->with('Text');
         $client->expects($this->once())
             ->method('sendBinary')
-            ->with('Binary')
-            ->willReturn(Future::complete(null));
+            ->with('Binary');
+        $client->method('isConnected')
+            ->willReturn(true);
 
         $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->broadcast('Text')->await();
@@ -235,6 +237,8 @@ class WebsocketTest extends AsyncTestCase
             ->method('send');
         $client->expects($this->never())
             ->method('sendBinary');
+        $client->method('isConnected')
+            ->willReturn(true);
 
         $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->broadcast('Text', [$client->getId()])->await();
@@ -249,12 +253,12 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
-            ->with('Text')
-            ->willReturn(Future::complete(null));
+            ->with('Text');
         $client->expects($this->once())
             ->method('sendBinary')
-            ->with('Binary')
-            ->willReturn(Future::complete(null));
+            ->with('Binary');
+        $client->method('isConnected')
+            ->willReturn(true);
 
         $this->execute(function (Websocket $websocket, Client $client) {
             $websocket->multicast('Text', [$client->getId()])->await();
@@ -266,7 +270,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $websocket = new Websocket($this->createMock(ClientHandler::class));
 
-        $webserver = new HttpServer([Server::listen('127.0.0.1:0')], $websocket, new NullLogger);
+        $webserver = new HttpServer([Socket\listen('127.0.0.1:0')], $websocket, new NullLogger);
 
         $observer = $this->createMock(WebsocketServerObserver::class);
         $observer->expects($this->once())

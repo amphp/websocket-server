@@ -40,14 +40,17 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
 
     private ClientFactory $clientFactory;
 
-    /** @var Client[] Indexed by client ID. */
+    /** @var array<int, Client> Indexed by client ID. */
     private array $clients = [];
 
+    /** @var array<int, Internal\AsyncSender> Senders indexed by client ID. */
+    private array $senders = [];
+
     /**
-     * @param ClientHandler                  $clientHandler
-     * @param Options|null                   $options
+     * @param ClientHandler $clientHandler
+     * @param Options|null $options
      * @param CompressionContextFactory|null $compressionFactory
-     * @param ClientFactory|null             $clientFactory
+     * @param ClientFactory|null $clientFactory
      */
     public function __construct(
         ClientHandler $clientHandler,
@@ -170,7 +173,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
             }
         }
 
-        $response->upgrade(fn(UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
+        $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
 
         return $response;
     }
@@ -198,14 +201,14 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         // @formatter:off
         /** @noinspection SuspiciousBinaryOperationInspection */
         \assert($this->logger->debug(\sprintf(
-            'Upgraded %s #%d to websocket connection #%d',
-            $socket->getRemoteAddress()->toString(),
-            (int) $socketResource,
-            $client->getId()
-        )) || true);
+                'Upgraded %s #%d to websocket connection #%d',
+                $socket->getRemoteAddress()->toString(),
+                (int) $socketResource,
+                $client->getId()
+            )) || true);
         // @formatter:on
 
-        EventLoop::queue(fn() => $this->runClient($client, $request, $response));
+        EventLoop::queue(fn () => $this->runClient($client, $request, $response));
     }
 
     private function runClient(Client $client, Request $request, Response $response): void
@@ -214,10 +217,11 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
 
         $id = $client->getId();
         $this->clients[$id] = $client;
+        $this->senders[$id] = new Internal\AsyncSender($client);
 
         $client->onClose(function (Client $client, int $code, string $reason): void {
             $id = $client->getId();
-            unset($this->clients[$id]);
+            unset($this->clients[$id], $this->senders[$id]);
 
             if (!$client->isClosedByPeer()) {
                 return;
@@ -255,15 +259,6 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         }
     }
 
-    /**
-     * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
-     *
-     * @param string $data Data to send.
-     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
-     *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                        generally undesirable to await this future in a coroutine.
-     */
     public function broadcast(string $data, array $exceptIds = []): Future
     {
         return $this->broadcastData($data, false, $exceptIds);
@@ -279,39 +274,21 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         }
 
         $futures = [];
-        foreach ($this->clients as $id => $client) {
+        foreach ($this->senders as $id => $sender) {
             if (isset($exceptIdLookup[$id])) {
                 continue;
             }
-            $futures[] = $binary ? $client->sendBinary($data) : $client->send($data);
+            $futures[$id] = $sender->send($data, $binary);
         }
 
         return async(static fn () => Future\settle($futures));
     }
 
-    /**
-     * Send a binary message to all clients (except those given in the optional array).
-     *
-     * @param string $data Data to send.
-     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
-     *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this future in a coroutine.
-     */
     public function broadcastBinary(string $data, array $exceptIds = []): Future
     {
         return $this->broadcastData($data, true, $exceptIds);
     }
 
-    /**
-     * Send a UTF-8 text message to a set of clients.
-     *
-     * @param string $data Data to send.
-     * @param int[]  $clientIds Array of client IDs.
-     *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this future in a coroutine.
-     */
     public function multicast(string $data, array $clientIds): Future
     {
         return $this->multicastData($data, false, $clientIds);
@@ -321,11 +298,11 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
     {
         $futures = [];
         foreach ($clientIds as $id) {
-            if (!isset($this->clients[$id])) {
+            if (!isset($this->senders[$id])) {
                 continue;
             }
-            $client = $this->clients[$id];
-            $futures[] = $binary ? $client->sendBinary($data) : $client->send($data);
+            $sender = $this->senders[$id];
+            $futures[$id] = $sender->send($data, $binary);
         }
         return async(static fn () => Future\settle($futures));
     }
@@ -334,7 +311,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
      * Send a binary message to a set of clients.
      *
      * @param string $data Data to send.
-     * @param int[]  $clientIds Array of client IDs.
+     * @param int[] $clientIds Array of client IDs.
      *
      * @return Future<array> Resolves once the message has been sent to all clients. Note it is
      *                       generally undesirable to await this future in a coroutine.
@@ -410,7 +387,7 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         $onStartFutures = [];
         foreach ($this->observers as $observer) {
             \assert($observer instanceof WebsocketServerObserver);
-            $onStartFutures[] = async(fn() => $observer->onStart($server, $this));
+            $onStartFutures[] = async(fn () => $observer->onStart($server, $this));
         }
 
         [$exceptions] = Future\settle($onStartFutures);
@@ -428,14 +405,14 @@ final class Websocket implements Gateway, RequestHandler, ServerObserver
         $onStopFutures = [];
         foreach ($this->observers as $observer) {
             \assert($observer instanceof WebsocketServerObserver);
-            $onStopFutures[] = async(fn() => $observer->onStop($server, $this));
+            $onStopFutures[] = async(fn () => $observer->onStop($server, $this));
         }
 
         [$exceptions] = Future\settle($onStopFutures);
 
         $closeFutures = [];
         foreach ($this->clients as $client) {
-            $closeFutures[] = async(fn() => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
+            $closeFutures[] = async(fn () => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
         }
 
         Future\settle($closeFutures); // Ignore client close failures since we're shutting down anyway.
