@@ -17,7 +17,7 @@ use function Amp\async;
 
 final class Websocket implements RequestHandler, ServerObserver
 {
-    private Endpoint $gateway;
+    private ClientGateway $gateway;
 
     private RequestHandler $upgradeHandler;
 
@@ -39,7 +39,7 @@ final class Websocket implements RequestHandler, ServerObserver
         $clientFactory ??= new Rfc6455ClientFactory;
         $compressionFactory ??= new Rfc7692CompressionFactory;
 
-        $this->gateway = new Endpoint(
+        $this->gateway = new ClientGateway(
             $clientHandler,
             $options ?? Options::createServerDefault(),
             $clientFactory,

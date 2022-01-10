@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 use function Amp\async;
 
-final class Endpoint implements Gateway, ServerObserver
+final class ClientGateway implements Gateway, ServerObserver
 {
     private PsrLogger $logger;
 
