@@ -19,7 +19,7 @@ final class Websocket implements RequestHandler, ServerObserver
 {
     private Rfc6455Gateway $gateway;
 
-    private Rfc6455UpgradeHandler $upgradeHandler;
+    private RequestHandler $upgradeHandler;
 
     private \SplObjectStorage $observers;
 
@@ -33,7 +33,8 @@ final class Websocket implements RequestHandler, ServerObserver
         ClientHandler $clientHandler,
         ?Options $options = null,
         ?CompressionContextFactory $compressionFactory = null,
-        ?ClientFactory $clientFactory = null
+        ?ClientFactory $clientFactory = null,
+        ?RequestHandler $upgradeHandler = null,
     ) {
         $clientFactory ??= new Rfc6455ClientFactory;
         $compressionFactory ??= new Rfc7692CompressionFactory;
@@ -46,7 +47,7 @@ final class Websocket implements RequestHandler, ServerObserver
         );
 
         $this->observers = new \SplObjectStorage;
-        $this->upgradeHandler = new Rfc6455UpgradeHandler;
+        $this->upgradeHandler = $upgradeHandler ?? new Rfc6455UpgradeHandler;
 
         if ($clientHandler instanceof WebsocketServerObserver) {
             $this->observers->attach($clientHandler);
