@@ -16,8 +16,12 @@ interface Gateway
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this promise in a coroutine.
+     * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
+     * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
+     * sends that failed and an array with keys corresponding to client IDs of successful sends.
+     * Note it is generally undesirable to await this future in a coroutine.
+     *
+     * @see Future\settle() Completion array corresponds to the return of this function.
      */
     public function broadcast(string $data, array $exceptIds = []): Future;
 
@@ -27,8 +31,12 @@ interface Gateway
      * @param string $data Data to send.
      * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
      *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this promise in a coroutine.
+     * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
+     * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
+     * sends that failed and an array with keys corresponding to client IDs of successful sends.
+     * Note it is generally undesirable to await this future in a coroutine.
+     *
+     * @see Future\settle() Completion array corresponds to the return of this function.
      */
     public function broadcastBinary(string $data, array $exceptIds = []): Future;
 
@@ -38,8 +46,12 @@ interface Gateway
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this promise in a coroutine.
+     * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
+     * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
+     * sends that failed and an array with keys corresponding to client IDs of successful sends.
+     * Note it is generally undesirable to await this future in a coroutine.
+     *
+     * @see Future\settle() Completion array corresponds to the return of this function.
      */
     public function multicast(string $data, array $clientIds): Future;
 
@@ -49,8 +61,12 @@ interface Gateway
      * @param string $data Data to send.
      * @param int[]  $clientIds Array of client IDs.
      *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this promise in a coroutine.
+     * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
+     * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
+     * sends that failed and an array with keys corresponding to client IDs of successful sends.
+     * Note it is generally undesirable to await this future in a coroutine.
+     *
+     * @see Future\settle() Completion array corresponds to the return of this function.
      */
     public function multicastBinary(string $data, array $clientIds): Future;
 
