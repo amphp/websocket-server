@@ -30,7 +30,7 @@
         "amphp/amp": "^3-dev",
         "amphp/byte-stream": "^2-dev",
         "amphp/http": "^1.3",
-        "amphp/http-server": "^3-dev",
+        "amphp/http-server": "dev-temporary-branch-with-serverobserver as 3.0.0",
         "amphp/socket": "^2-dev",
         "amphp/websocket": "^2-dev"
     },

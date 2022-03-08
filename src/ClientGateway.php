@@ -84,7 +84,7 @@ final class ClientGateway implements Gateway, ServerObserver
         // Setting via stream API doesn't work and TLS streams are not supported
         // once TLS is enabled
         $isNodelayChangeSupported = $socketResource !== null
-            && $socket->getTlsInfo() === null
+            && !isset(\stream_get_meta_data($socketResource)["crypto"])
             && \function_exists('socket_import_stream')
             && \defined('TCP_NODELAY');
 

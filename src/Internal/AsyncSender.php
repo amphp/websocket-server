@@ -42,7 +42,7 @@ final class AsyncSender
                         $binary ? $client->sendBinary($data) : $client->send($data);
                         $deferredFuture->complete();
                     } catch (\Throwable $exception) {
-                        $this->active = false;
+                        $active = false;
                         $deferredFuture->error($exception);
                         while (!$writeQueue->isEmpty()) {
                             [$deferredFuture] = $writeQueue->shift();
