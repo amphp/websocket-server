@@ -103,14 +103,6 @@ final class ClientGateway implements Gateway, ServerObserver
             )) || true);
         // @formatter:on
 
-        EventLoop::queue(fn () => $this->runClient($client, $request, $response));
-    }
-
-
-    private function runClient(Client $client, Request $request, Response $response): void
-    {
-        \assert(isset($this->logger)); // For Psalm.
-
         $id = $client->getId();
         $this->clients[$id] = $client;
         $this->senders[$id] = new Internal\AsyncSender($client);
