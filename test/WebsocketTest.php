@@ -9,10 +9,10 @@ use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
+use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
-use Amp\Socket\SocketServer;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
@@ -34,19 +34,16 @@ class WebsocketTest extends AsyncTestCase
         $factory->method('createClient')
             ->willReturn($client);
 
-        $server = Socket\listen("127.0.0.1:0");
-
         $deferred = new DeferredFuture;
 
         $webserver = $this->createWebsocketServer(
-            $server,
             $factory,
             function (Gateway $gateway, Client $client) use ($onConnect, $deferred): void {
                 $deferred->complete($onConnect($gateway, $client));
             }
         );
 
-        $webserver->start();
+        $server = $webserver->getServers()[0] ?? self::fail('HTTP server did not create any socket servers');
 
         $socket = Socket\connect($server->getAddress()->toString());
         \assert($socket instanceof Socket\EncryptableSocket);
@@ -67,11 +64,12 @@ class WebsocketTest extends AsyncTestCase
     }
 
     protected function createWebsocketServer(
-        SocketServer $server,
         ClientFactory $factory,
         callable $onConnect
     ): HttpServer {
-        $websocket = new Websocket(new class($onConnect) implements ClientHandler {
+        $httpServer = new SocketHttpServer(new NullLogger);
+
+        $websocket = new Websocket($httpServer, new class($onConnect) implements ClientHandler {
             private $onConnect;
 
             public function __construct(callable $onConnect)
@@ -90,11 +88,11 @@ class WebsocketTest extends AsyncTestCase
             }
         }, null, null, $factory);
 
-        return new HttpServer(
-            [$server],
-            $websocket,
-            new NullLogger
-        );
+        $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));
+
+        $httpServer->start($websocket);
+
+        return $httpServer;
     }
 
     /**
@@ -114,10 +112,10 @@ class WebsocketTest extends AsyncTestCase
                 return $response;
             });
 
-        $websocket = new Websocket($clientHandler);
-
-        $server = new HttpServer([Socket\listen('127.0.0.1:0')], $websocket, new NullLogger);
-        $server->start();
+        $server = new SocketHttpServer(new NullLogger);
+        $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
+        $websocket = new Websocket($server, $clientHandler);
+        $server->start($websocket);
 
         try {
             $response = $websocket->handleRequest($request);
@@ -212,7 +210,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $client = $this->createMock(Client::class);
         $client->method('getRemoteAddress')
-            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
+            ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
             ->with('Text');
@@ -232,7 +230,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $client = $this->createMock(Client::class);
         $client->method('getRemoteAddress')
-            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
+            ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->never())
             ->method('send');
         $client->expects($this->never())
@@ -250,7 +248,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $client = $this->createMock(Client::class);
         $client->method('getRemoteAddress')
-            ->willReturn(new Socket\SocketAddress('127.0.0.1', 1));
+            ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
             ->method('send')
             ->with('Text');
@@ -268,9 +266,10 @@ class WebsocketTest extends AsyncTestCase
 
     public function testWebsocketObserverAttachment(): void
     {
-        $websocket = new Websocket($this->createMock(ClientHandler::class));
+        $webserver = new SocketHttpServer(new NullLogger);
+        $webserver->expose(new Socket\InternetAddress('127.0.0.1', 0));
 
-        $webserver = new HttpServer([Socket\listen('127.0.0.1:0')], $websocket, new NullLogger);
+        $websocket = new Websocket($webserver, $this->createMock(ClientHandler::class));
 
         $observer = $this->createMock(WebsocketServerObserver::class);
         $observer->expects($this->once())
@@ -281,7 +280,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket->attach($observer);
         $websocket->attach($observer); // Attaching same object should be ignored.
 
-        $webserver->start();
+        $webserver->start($websocket);
 
         $webserver->stop();
     }

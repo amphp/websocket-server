@@ -7,11 +7,10 @@ use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use function Amp\Websocket\generateAcceptFromKey;
 
-final class Rfc6455UpgradeHandler implements RequestHandler, ServerObserver
+final class Rfc6455UpgradeHandler implements RequestHandler
 {
     private ErrorHandler $errorHandler;
 

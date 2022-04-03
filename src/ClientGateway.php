@@ -9,7 +9,6 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClosedException;
@@ -21,7 +20,7 @@ use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 use function Amp\async;
 
-final class ClientGateway implements Gateway, ServerObserver
+final class ClientGateway implements Gateway
 {
     private PsrLogger $logger;
 
@@ -35,10 +34,10 @@ final class ClientGateway implements Gateway, ServerObserver
 
 
     public function __construct(
-        private ClientHandler $clientHandler,
+        private readonly ClientHandler $clientHandler,
         private Options $options,
-        private ClientFactory $clientFactory,
-        private CompressionContextFactory $compressionFactory,
+        private readonly ClientFactory $clientFactory,
+        private readonly CompressionContextFactory $compressionFactory,
     ) {
     }
 
@@ -98,10 +97,16 @@ final class ClientGateway implements Gateway, ServerObserver
         \assert($this->logger->debug(\sprintf(
                 'Upgraded %s #%d to websocket connection #%d',
                 $socket->getRemoteAddress()->toString(),
-                (int) $socketResource,
+                $socket->getClient()->getId(),
                 $client->getId()
             )) || true);
         // @formatter:on
+        EventLoop::queue(fn () => $this->runClient($client, $request, $response));
+    }
+
+    private function runClient(Client $client, Request $request, Response $response): void
+    {
+        \assert(isset($this->logger)); // For Psalm.
 
         $id = $client->getId();
         $this->clients[$id] = $client;

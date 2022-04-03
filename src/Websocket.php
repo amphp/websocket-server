@@ -8,14 +8,13 @@ use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Http\Server\ServerObserver;
 use Amp\Http\Status;
 use Amp\Websocket\CompressionContextFactory;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc7692CompressionFactory;
 use function Amp\async;
 
-final class Websocket implements RequestHandler, ServerObserver
+final class Websocket implements RequestHandler
 {
     private ClientGateway $gateway;
 
@@ -30,12 +29,16 @@ final class Websocket implements RequestHandler, ServerObserver
      * @param ClientFactory|null $clientFactory
      */
     public function __construct(
+        HttpServer $httpServer,
         ClientHandler $clientHandler,
         ?Options $options = null,
         ?CompressionContextFactory $compressionFactory = null,
         ?ClientFactory $clientFactory = null,
         ?RequestHandler $upgradeHandler = null,
     ) {
+        $httpServer->onStart($this->onStart(...));
+        $httpServer->onStop($this->onStop(...));
+
         $clientFactory ??= new Rfc6455ClientFactory;
         $compressionFactory ??= new Rfc7692CompressionFactory;
 

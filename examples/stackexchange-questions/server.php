@@ -9,6 +9,7 @@ use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
+use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Http\Status;
 use Amp\Log\ConsoleFormatter;
@@ -25,7 +26,17 @@ use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
-$websocket = new Websocket(new class implements ClientHandler, WebsocketServerObserver {
+$logHandler = new StreamHandler(getStdout());
+$logHandler->setFormatter(new ConsoleFormatter);
+$logger = new Logger('server');
+$logger->pushHandler($logHandler);
+
+$server = new SocketHttpServer($logger);
+
+$server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
+$server->expose(new Socket\InternetAddress('[::1]', 1337));
+
+$websocket = new Websocket($server, new class ($server) implements ClientHandler, WebsocketServerObserver {
     private string $watcher;
     private ?int $newestQuestion = null;
 
@@ -75,23 +86,11 @@ $websocket = new Websocket(new class implements ClientHandler, WebsocketServerOb
     }
 });
 
-$sockets = [
-    Socket\listen('127.0.0.1:1337'),
-    Socket\listen('[::1]:1337'),
-];
+$router = new Router($server);
+$router->addRoute('GET', '/broadcast', $websocket);
+$router->setFallback(new DocumentRoot($server, __DIR__ . '/public'));
 
-$router = new Router;
-$router->addRoute('GET', '/live', $websocket);
-$router->setFallback(new DocumentRoot(__DIR__ . '/public'));
-
-$logHandler = new StreamHandler(getStdout());
-$logHandler->setFormatter(new ConsoleFormatter);
-$logger = new Logger('server');
-$logger->pushHandler($logHandler);
-
-$server = new HttpServer($sockets, $router, $logger);
-
-$server->start();
+$server->start($router);
 
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
