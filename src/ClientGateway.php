@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket\Server;
 
-use Amp\CompositeException;
 use Amp\Future;
 use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\ErrorHandler;
@@ -11,11 +10,11 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
 use Amp\Websocket\Client;
+use Amp\Websocket\ClientMetadata;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
 use Amp\Websocket\CompressionContext;
 use Amp\Websocket\CompressionContextFactory;
-use Amp\Websocket\Options;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 use function Amp\async;
@@ -35,9 +34,8 @@ final class ClientGateway implements Gateway
 
     public function __construct(
         private readonly ClientHandler $clientHandler,
-        private Options $options,
         private readonly ClientFactory $clientFactory,
-        private readonly CompressionContextFactory $compressionFactory,
+        private readonly ?CompressionContextFactory $compressionFactory = null,
     ) {
     }
 
@@ -55,7 +53,7 @@ final class ClientGateway implements Gateway
         }
 
         $compressionContext = null;
-        if ($this->options->isCompressionEnabled()) {
+        if ($this->compressionFactory) {
             $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
 
             foreach ($extensions as $extension) {
@@ -76,7 +74,7 @@ final class ClientGateway implements Gateway
     {
         \assert(isset($this->logger)); // For Psalm.
 
-        $client = $this->clientFactory->createClient($request, $response, $socket, $this->options, $compressionContext);
+        $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
 
         $socketResource = $socket->getResource();
 
@@ -112,15 +110,15 @@ final class ClientGateway implements Gateway
         $this->clients[$id] = $client;
         $this->senders[$id] = new Internal\AsyncSender($client);
 
-        $client->onClose(function (Client $client, int $code, string $reason): void {
-            $id = $client->getId();
+        $client->onClose(function (ClientMetadata $metadata): void {
+            $id = $metadata->id;
             unset($this->clients[$id], $this->senders[$id]);
 
-            if (!$client->isClosedByPeer()) {
+            if (!$metadata->closedByPeer) {
                 return;
             }
 
-            switch ($code) {
+            switch ($metadata->closeCode) {
                 case Code::PROTOCOL_ERROR:
                 case Code::UNACCEPTABLE_TYPE:
                 case Code::POLICY_VIOLATION:
@@ -131,8 +129,8 @@ final class ClientGateway implements Gateway
                     \assert(isset($this->logger)); // For Psalm.
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d): %s',
-                        $code,
-                        $reason
+                        $metadata->closeCode,
+                        $metadata->closeReason,
                     ));
             }
         });
@@ -147,7 +145,7 @@ final class ClientGateway implements Gateway
             return;
         }
 
-        if ($client->isConnected()) {
+        if (!$client->isClosed()) {
             $client->close(Code::NORMAL_CLOSE, 'Closing connection');
         }
     }
@@ -246,26 +244,13 @@ final class ClientGateway implements Gateway
         return $this->errorHandler;
     }
 
-    /**
-     * @return Options
-     */
-    public function getOptions(): Options
-    {
-        return $this->options;
-    }
-
     public function onStart(HttpServer $server): void
     {
         $this->logger = $server->getLogger();
         $this->errorHandler = $server->getErrorHandler();
 
-        if ($this->options->isCompressionEnabled() && !\extension_loaded('zlib')) {
-            $this->options = $this->options->withoutCompression();
-            $this->logger->warning('Message compression is enabled in websocket options, but ext-zlib is required for compression');
-        }
-
-        if (!empty($exceptions)) {
-            throw new CompositeException($exceptions, 'Websocket initialization failed');
+        if ($this->compressionFactory && !\extension_loaded('zlib')) {
+            $this->logger->warning('Message compression is enabled in websocket, but ext-zlib is required for compression');
         }
     }
 
@@ -276,10 +261,6 @@ final class ClientGateway implements Gateway
             $closeFutures[] = async(fn () => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
         }
 
-        Future\settle($closeFutures); // Ignore client close failures since we're shutting down anyway.
-
-        if (!empty($exceptions)) {
-            throw new CompositeException($exceptions, 'Websocket shutdown failed');
-        }
+        Future\awaitAll($closeFutures); // Ignore client close failures since we're shutting down anyway.
     }
 }

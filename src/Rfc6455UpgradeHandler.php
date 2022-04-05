@@ -92,8 +92,4 @@ final class Rfc6455UpgradeHandler implements RequestHandler
     {
         $this->errorHandler = $server->getErrorHandler();
     }
-
-    public function onStop(HttpServer $server): void
-    {
-    }
 }

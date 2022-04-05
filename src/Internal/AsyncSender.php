@@ -24,13 +24,13 @@ final class AsyncSender
         $suspension = &$this->suspension;
         $active = &$this->active;
         EventLoop::queue(static function () use ($client, $writeQueue, &$suspension, &$active): void {
-            while ($active && $client->isConnected()) {
+            while ($active && !$client->isClosed()) {
                 if ($writeQueue->isEmpty()) {
-                    $suspension = EventLoop::createSuspension();
+                    $suspension = EventLoop::getSuspension();
                     $suspension->suspend();
                 }
 
-                while (!$writeQueue->isEmpty() && $client->isConnected()) {
+                while (!$writeQueue->isEmpty() && !$client->isClosed()) {
                     /**
                      * @var DeferredFuture $deferredFuture
                      * @var string $data

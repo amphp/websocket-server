@@ -10,8 +10,6 @@ use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
 use Amp\Websocket\CompressionContextFactory;
-use Amp\Websocket\Options;
-use Amp\Websocket\Rfc7692CompressionFactory;
 use function Amp\async;
 
 final class Websocket implements RequestHandler
@@ -24,14 +22,12 @@ final class Websocket implements RequestHandler
 
     /**
      * @param ClientHandler $clientHandler
-     * @param Options|null $options
      * @param CompressionContextFactory|null $compressionFactory
      * @param ClientFactory|null $clientFactory
      */
     public function __construct(
         HttpServer $httpServer,
         ClientHandler $clientHandler,
-        ?Options $options = null,
         ?CompressionContextFactory $compressionFactory = null,
         ?ClientFactory $clientFactory = null,
         ?RequestHandler $upgradeHandler = null,
@@ -39,18 +35,22 @@ final class Websocket implements RequestHandler
         $httpServer->onStart($this->onStart(...));
         $httpServer->onStop($this->onStop(...));
 
-        $clientFactory ??= new Rfc6455ClientFactory;
-        $compressionFactory ??= new Rfc7692CompressionFactory;
+        $clientFactory ??= new Rfc6455ClientFactory();
 
         $this->gateway = new ClientGateway(
             $clientHandler,
-            $options ?? Options::createServerDefault(),
             $clientFactory,
             $compressionFactory,
         );
 
         $this->observers = new \SplObjectStorage;
-        $this->upgradeHandler = $upgradeHandler ?? new Rfc6455UpgradeHandler;
+
+        if (!$upgradeHandler) {
+            $upgradeHandler = new Rfc6455UpgradeHandler();
+            $httpServer->onStart($upgradeHandler->onStart(...));
+        }
+
+        $this->upgradeHandler = $upgradeHandler;
 
         if ($clientHandler instanceof WebsocketServerObserver) {
             $this->observers->attach($clientHandler);
@@ -86,10 +86,7 @@ final class Websocket implements RequestHandler
         $this->observers->attach($observer);
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function onStart(HttpServer $server): void
+    private function onStart(HttpServer $server): void
     {
         $this->upgradeHandler->onStart($server);
         $this->gateway->onStart($server);
@@ -107,10 +104,7 @@ final class Websocket implements RequestHandler
         }
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function onStop(HttpServer $server): void
+    private function onStop(HttpServer $server): void
     {
         $onStopFutures = [];
         foreach ($this->observers as $observer) {
@@ -120,7 +114,6 @@ final class Websocket implements RequestHandler
 
         [$exceptions] = Future\settle($onStopFutures);
 
-        $this->upgradeHandler->onStop($server);
         $this->gateway->onStop($server);
 
         if (!empty($exceptions)) {

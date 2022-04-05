@@ -6,7 +6,6 @@ use Amp\ByteStream;
 use Amp\DeferredFuture;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
-use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
@@ -55,18 +54,16 @@ class WebsocketTest extends AsyncTestCase
             while (null !== $socket->read());
         });
 
-        try {
-            $deferred->getFuture()->await();
-        } finally {
-            $webserver->stop();
-            $socket->close();
-        }
+        $deferred->getFuture()
+            ->finally($webserver->stop(...))
+            ->finally($socket->close(...))
+            ->await();
     }
 
     protected function createWebsocketServer(
         ClientFactory $factory,
         callable $onConnect
-    ): HttpServer {
+    ): SocketHttpServer {
         $httpServer = new SocketHttpServer(new NullLogger);
 
         $websocket = new Websocket($httpServer, new class($onConnect) implements ClientHandler {
@@ -77,7 +74,7 @@ class WebsocketTest extends AsyncTestCase
                 $this->onConnect = $onConnect;
             }
 
-            public function handleHandshake(Gateway $websocket, Request $request, Response $response): Response
+            public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
             {
                 return $response;
             }
@@ -86,7 +83,7 @@ class WebsocketTest extends AsyncTestCase
             {
                 ($this->onConnect)($gateway, $client);
             }
-        }, null, null, $factory);
+        }, clientFactory: $factory);
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));
 
@@ -217,8 +214,8 @@ class WebsocketTest extends AsyncTestCase
         $client->expects($this->once())
             ->method('sendBinary')
             ->with('Binary');
-        $client->method('isConnected')
-            ->willReturn(true);
+        $client->method('isClosed')
+            ->willReturn(false);
 
         $this->execute(function (Gateway $gateway, Client $client) {
             $gateway->broadcast('Text')->await();
@@ -235,8 +232,8 @@ class WebsocketTest extends AsyncTestCase
             ->method('send');
         $client->expects($this->never())
             ->method('sendBinary');
-        $client->method('isConnected')
-            ->willReturn(true);
+        $client->method('isClosed')
+            ->willReturn(false);
 
         $this->execute(function (Gateway $gateway, Client $client) {
             $gateway->broadcast('Text', [$client->getId()])->await();
@@ -255,8 +252,8 @@ class WebsocketTest extends AsyncTestCase
         $client->expects($this->once())
             ->method('sendBinary')
             ->with('Binary');
-        $client->method('isConnected')
-            ->willReturn(true);
+        $client->method('isClosed')
+            ->willReturn(false);
 
         $this->execute(function (Gateway $gateway, Client $client) {
             $gateway->multicast('Text', [$client->getId()])->await();

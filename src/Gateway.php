@@ -5,7 +5,6 @@ namespace Amp\Websocket\Server;
 use Amp\Future;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Websocket\Client;
-use Amp\Websocket\Options;
 use Psr\Log\LoggerInterface as PsrLogger;
 
 interface Gateway
@@ -84,9 +83,4 @@ interface Gateway
      * @return ErrorHandler HTTP server error handler.
      */
     public function getErrorHandler(): ErrorHandler;
-
-    /**
-     * @return Options
-     */
-    public function getOptions(): Options;
 }
