@@ -17,7 +17,6 @@ use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
-use Amp\Websocket\Server\WebsocketServerObserver;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
@@ -64,9 +63,10 @@ class WebsocketTest extends AsyncTestCase
         ClientFactory $factory,
         callable $onConnect
     ): SocketHttpServer {
-        $httpServer = new SocketHttpServer(new NullLogger);
+        $logger = new NullLogger();
+        $httpServer = new SocketHttpServer($logger);
 
-        $websocket = new Websocket($httpServer, new class($onConnect) implements ClientHandler {
+        $websocket = new Websocket($logger, new class($onConnect) implements ClientHandler {
             private $onConnect;
 
             public function __construct(callable $onConnect)
@@ -109,9 +109,10 @@ class WebsocketTest extends AsyncTestCase
                 return $response;
             });
 
-        $server = new SocketHttpServer(new NullLogger);
+        $logger = new NullLogger;
+        $server = new SocketHttpServer($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
-        $websocket = new Websocket($server, $clientHandler);
+        $websocket = new Websocket($logger, $clientHandler);
         $server->start($websocket);
 
         try {
@@ -259,26 +260,5 @@ class WebsocketTest extends AsyncTestCase
             $gateway->multicast('Text', [$client->getId()])->await();
             $gateway->multicastBinary('Binary', [$client->getId()])->await();
         }, $client);
-    }
-
-    public function testWebsocketObserverAttachment(): void
-    {
-        $webserver = new SocketHttpServer(new NullLogger);
-        $webserver->expose(new Socket\InternetAddress('127.0.0.1', 0));
-
-        $websocket = new Websocket($webserver, $this->createMock(ClientHandler::class));
-
-        $observer = $this->createMock(WebsocketServerObserver::class);
-        $observer->expects($this->once())
-            ->method('onStart');
-        $observer->expects($this->once())
-            ->method('onStop');
-
-        $websocket->attach($observer);
-        $websocket->attach($observer); // Attaching same object should be ignored.
-
-        $webserver->start($websocket);
-
-        $webserver->stop();
     }
 }

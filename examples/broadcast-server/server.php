@@ -3,6 +3,8 @@
 // Note that this example requires amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
+use Amp\Http\Server\DefaultErrorHandler;
+use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -27,16 +29,23 @@ $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
 
+$errorHandler = new DefaultErrorHandler();
+
 $server = new SocketHttpServer($logger);
 
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
-$websocket = new Websocket($server, new class implements ClientHandler {
+$websocket = new Websocket($logger, new class ($errorHandler) implements ClientHandler {
+    public function __construct(
+        private readonly ErrorHandler $errorHandler,
+    ) {
+    }
+
     public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-            return $gateway->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
+            return $this->errorHandler->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
         }
 
         return $response;
@@ -55,7 +64,7 @@ $router = new Router($server);
 $router->addRoute('GET', '/broadcast', $websocket);
 $router->setFallback(new DocumentRoot($server, __DIR__ . '/public'));
 
-$server->start($router);
+$server->start($router, $errorHandler);
 
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);

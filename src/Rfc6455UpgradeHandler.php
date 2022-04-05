@@ -2,8 +2,8 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\ErrorHandler;
-use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
@@ -12,7 +12,10 @@ use function Amp\Websocket\generateAcceptFromKey;
 
 final class Rfc6455UpgradeHandler implements RequestHandler
 {
-    private ErrorHandler $errorHandler;
+    public function __construct(
+        private readonly ErrorHandler $errorHandler = new DefaultErrorHandler(),
+    ) {
+    }
 
     public function handleRequest(Request $request): Response
     {
@@ -86,10 +89,5 @@ final class Rfc6455UpgradeHandler implements RequestHandler
             'upgrade' => 'websocket',
             'sec-websocket-accept' => generateAcceptFromKey($acceptKey),
         ]);
-    }
-
-    public function onStart(HttpServer $server): void
-    {
-        $this->errorHandler = $server->getErrorHandler();
     }
 }

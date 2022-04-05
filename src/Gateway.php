@@ -3,9 +3,9 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Future;
-use Amp\Http\Server\ErrorHandler;
+use Amp\Http\Server\Request;
+use Amp\Http\Server\Response;
 use Amp\Websocket\Client;
-use Psr\Log\LoggerInterface as PsrLogger;
 
 interface Gateway
 {
@@ -75,12 +75,7 @@ interface Gateway
     public function getClients(): array;
 
     /**
-     * @return PsrLogger HTTP server logger.
+     * Add a client to this Gateway. This method generally should not be called by a {@see ClientHandler}.
      */
-    public function getLogger(): PsrLogger;
-
-    /**
-     * @return ErrorHandler HTTP server error handler.
-     */
-    public function getErrorHandler(): ErrorHandler;
+    public function addClient(Client $client, Request $request, Response $response): void;
 }

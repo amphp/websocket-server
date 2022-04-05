@@ -3,109 +3,22 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Future;
-use Amp\Http\Server\Driver\UpgradedSocket;
-use Amp\Http\Server\ErrorHandler;
-use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Status;
 use Amp\Websocket\Client;
 use Amp\Websocket\ClientMetadata;
-use Amp\Websocket\ClosedException;
-use Amp\Websocket\Code;
-use Amp\Websocket\CompressionContext;
-use Amp\Websocket\CompressionContextFactory;
-use Psr\Log\LoggerInterface as PsrLogger;
-use Revolt\EventLoop;
 use function Amp\async;
 
 final class ClientGateway implements Gateway
 {
-    private PsrLogger $logger;
-
-    private ErrorHandler $errorHandler;
-
     /** @var array<int, Client> Indexed by client ID. */
     private array $clients = [];
 
     /** @var array<int, Internal\AsyncSender> Senders indexed by client ID. */
     private array $senders = [];
 
-
-    public function __construct(
-        private readonly ClientHandler $clientHandler,
-        private readonly ClientFactory $clientFactory,
-        private readonly ?CompressionContextFactory $compressionFactory = null,
-    ) {
-    }
-
-    public function handleHandshake(Request $request, Response $response): Response
+    public function addClient(Client $client, Request $request, Response $response): void
     {
-        \assert($response->getStatus() === Status::SWITCHING_PROTOCOLS);
-
-        $response = $this->clientHandler->handleHandshake($this, $request, $response);
-
-        if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
-            $response->removeHeader('connection');
-            $response->removeHeader('upgrade');
-            $response->removeHeader('sec-websocket-accept');
-            return $response;
-        }
-
-        $compressionContext = null;
-        if ($this->compressionFactory) {
-            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
-
-            foreach ($extensions as $extension) {
-                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
-                    /** @psalm-suppress PossiblyNullArgument */
-                    $response->setHeader('sec-websocket-extensions', $headerLine);
-                    break;
-                }
-            }
-        }
-
-        $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
-
-        return $response;
-    }
-
-    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
-    {
-        \assert(isset($this->logger)); // For Psalm.
-
-        $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
-
-        $socketResource = $socket->getResource();
-
-        // Setting via stream API doesn't work and TLS streams are not supported
-        // once TLS is enabled
-        $isNodelayChangeSupported = $socketResource !== null
-            && !isset(\stream_get_meta_data($socketResource)["crypto"])
-            && \function_exists('socket_import_stream')
-            && \defined('TCP_NODELAY');
-
-        if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
-            /** @noinspection PhpComposerExtensionStubsInspection */
-            @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
-        }
-
-        // @formatter:off
-        /** @noinspection SuspiciousBinaryOperationInspection */
-        \assert($this->logger->debug(\sprintf(
-                'Upgraded %s #%d to websocket connection #%d',
-                $socket->getRemoteAddress()->toString(),
-                $socket->getClient()->getId(),
-                $client->getId()
-            )) || true);
-        // @formatter:on
-        EventLoop::queue(fn () => $this->runClient($client, $request, $response));
-    }
-
-    private function runClient(Client $client, Request $request, Response $response): void
-    {
-        \assert(isset($this->logger)); // For Psalm.
-
         $id = $client->getId();
         $this->clients[$id] = $client;
         $this->senders[$id] = new Internal\AsyncSender($client);
@@ -113,41 +26,7 @@ final class ClientGateway implements Gateway
         $client->onClose(function (ClientMetadata $metadata): void {
             $id = $metadata->id;
             unset($this->clients[$id], $this->senders[$id]);
-
-            if (!$metadata->closedByPeer) {
-                return;
-            }
-
-            switch ($metadata->closeCode) {
-                case Code::PROTOCOL_ERROR:
-                case Code::UNACCEPTABLE_TYPE:
-                case Code::POLICY_VIOLATION:
-                case Code::INCONSISTENT_FRAME_DATA_TYPE:
-                case Code::MESSAGE_TOO_LARGE:
-                case Code::EXPECTED_EXTENSION_MISSING:
-                case Code::BAD_GATEWAY:
-                    \assert(isset($this->logger)); // For Psalm.
-                    $this->logger->notice(\sprintf(
-                        'Client initiated websocket close reporting error (code: %d): %s',
-                        $metadata->closeCode,
-                        $metadata->closeReason,
-                    ));
-            }
         });
-
-        try {
-            $this->clientHandler->handleClient($this, $client, $request, $response);
-        } catch (ClosedException $exception) {
-            // Ignore ClosedExceptions thrown from closing the client while streaming a message.
-        } catch (\Throwable $exception) {
-            $this->logger->error((string) $exception);
-            $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
-            return;
-        }
-
-        if (!$client->isClosed()) {
-            $client->close(Code::NORMAL_CLOSE, 'Closing connection');
-        }
     }
 
     public function broadcast(string $data, array $exceptIds = []): Future
@@ -218,49 +97,5 @@ final class ClientGateway implements Gateway
     public function getClients(): array
     {
         return $this->clients;
-    }
-
-    /**
-     * @return PsrLogger Server logger.
-     */
-    public function getLogger(): PsrLogger
-    {
-        if (!isset($this->logger)) {
-            throw new \Error('Cannot get logger until the server has started');
-        }
-
-        return $this->logger;
-    }
-
-    /**
-     * @return ErrorHandler Server error handler.
-     */
-    public function getErrorHandler(): ErrorHandler
-    {
-        if (!isset($this->errorHandler)) {
-            throw new \Error('Cannot get error handler until the server has started');
-        }
-
-        return $this->errorHandler;
-    }
-
-    public function onStart(HttpServer $server): void
-    {
-        $this->logger = $server->getLogger();
-        $this->errorHandler = $server->getErrorHandler();
-
-        if ($this->compressionFactory && !\extension_loaded('zlib')) {
-            $this->logger->warning('Message compression is enabled in websocket, but ext-zlib is required for compression');
-        }
-    }
-
-    public function onStop(HttpServer $server): void
-    {
-        $closeFutures = [];
-        foreach ($this->clients as $client) {
-            $closeFutures[] = async(fn () => $client->close(Code::GOING_AWAY, 'Server shutting down!'));
-        }
-
-        Future\awaitAll($closeFutures); // Ignore client close failures since we're shutting down anyway.
     }
 }

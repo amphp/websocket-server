@@ -2,122 +2,138 @@
 
 namespace Amp\Websocket\Server;
 
-use Amp\CompositeException;
-use Amp\Future;
-use Amp\Http\Server\HttpServer;
+use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
+use Amp\Websocket\Client;
+use Amp\Websocket\ClientMetadata;
+use Amp\Websocket\ClosedException;
+use Amp\Websocket\Code;
+use Amp\Websocket\CompressionContext;
 use Amp\Websocket\CompressionContextFactory;
-use function Amp\async;
+use Psr\Log\LoggerInterface as PsrLogger;
+use Revolt\EventLoop;
 
 final class Websocket implements RequestHandler
 {
-    private ClientGateway $gateway;
-
-    private RequestHandler $upgradeHandler;
-
-    private \SplObjectStorage $observers;
-
-    /**
-     * @param ClientHandler $clientHandler
-     * @param CompressionContextFactory|null $compressionFactory
-     * @param ClientFactory|null $clientFactory
-     */
     public function __construct(
-        HttpServer $httpServer,
-        ClientHandler $clientHandler,
-        ?CompressionContextFactory $compressionFactory = null,
-        ?ClientFactory $clientFactory = null,
-        ?RequestHandler $upgradeHandler = null,
+        private readonly PsrLogger $logger,
+        private readonly ClientHandler $clientHandler,
+        private readonly Gateway $gateway = new ClientGateway(),
+        private readonly ClientFactory $clientFactory = new Rfc6455ClientFactory(),
+        private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
+        private readonly ?CompressionContextFactory $compressionFactory = null,
     ) {
-        $httpServer->onStart($this->onStart(...));
-        $httpServer->onStop($this->onStop(...));
-
-        $clientFactory ??= new Rfc6455ClientFactory();
-
-        $this->gateway = new ClientGateway(
-            $clientHandler,
-            $clientFactory,
-            $compressionFactory,
-        );
-
-        $this->observers = new \SplObjectStorage;
-
-        if (!$upgradeHandler) {
-            $upgradeHandler = new Rfc6455UpgradeHandler();
-            $httpServer->onStart($upgradeHandler->onStart(...));
-        }
-
-        $this->upgradeHandler = $upgradeHandler;
-
-        if ($clientHandler instanceof WebsocketServerObserver) {
-            $this->observers->attach($clientHandler);
-        }
-
-        if ($clientFactory instanceof WebsocketServerObserver) {
-            $this->observers->attach($clientFactory);
-        }
-
-        if ($compressionFactory instanceof WebsocketServerObserver) {
-            $this->observers->attach($compressionFactory);
-        }
     }
 
     public function handleRequest(Request $request): Response
     {
+        \assert($this->logger !== null);
+
         $response = $this->upgradeHandler->handleRequest($request);
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
             return $response;
         }
 
-        return $this->gateway->handleHandshake($request, $response);
-    }
+        $response = $this->clientHandler->handleHandshake($this->gateway, $request, $response);
 
-    /**
-     * Attaches a WebsocketObserver that is notified when the server starts and stops.
-     *
-     * @param WebsocketServerObserver $observer
-     */
-    public function attach(WebsocketServerObserver $observer): void
-    {
-        $this->observers->attach($observer);
-    }
-
-    private function onStart(HttpServer $server): void
-    {
-        $this->upgradeHandler->onStart($server);
-        $this->gateway->onStart($server);
-
-        $onStartFutures = [];
-        foreach ($this->observers as $observer) {
-            \assert($observer instanceof WebsocketServerObserver);
-            $onStartFutures[] = async(fn () => $observer->onStart($server, $this->gateway));
+        if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
+            $response->removeHeader('connection');
+            $response->removeHeader('upgrade');
+            $response->removeHeader('sec-websocket-accept');
+            return $response;
         }
 
-        [$exceptions] = Future\settle($onStartFutures);
+        $compressionContext = null;
+        if ($this->compressionFactory) {
+            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
 
-        if (!empty($exceptions)) {
-            throw new CompositeException($exceptions, 'Websocket initialization failed');
+            foreach ($extensions as $extension) {
+                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
+                    /** @psalm-suppress PossiblyNullArgument */
+                    $response->setHeader('sec-websocket-extensions', $headerLine);
+                    break;
+                }
+            }
         }
+
+        $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
+
+        return $response;
     }
 
-    private function onStop(HttpServer $server): void
+    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
     {
-        $onStopFutures = [];
-        foreach ($this->observers as $observer) {
-            \assert($observer instanceof WebsocketServerObserver);
-            $onStopFutures[] = async(fn () => $observer->onStop($server, $this->gateway));
+        \assert($this->logger !== null);
+
+        $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
+
+        $socketResource = $socket->getResource();
+
+        // Setting via stream API doesn't work and TLS streams are not supported
+        // once TLS is enabled
+        $isNodelayChangeSupported = $socketResource !== null
+            && !isset(\stream_get_meta_data($socketResource)["crypto"])
+            && \function_exists('socket_import_stream')
+            && \defined('TCP_NODELAY');
+
+        if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
+            /** @noinspection PhpComposerExtensionStubsInspection */
+            @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
         }
 
-        [$exceptions] = Future\settle($onStopFutures);
+        // @formatter:off
+        /** @noinspection SuspiciousBinaryOperationInspection */
+        \assert($this->logger->debug(\sprintf(
+                'Upgraded %s #%d to websocket connection #%d',
+                $socket->getRemoteAddress()->toString(),
+                $socket->getClient()->getId(),
+                $client->getId()
+            )) || true);
+        // @formatter:on
+        EventLoop::queue(fn () => $this->handleClient($client, $request, $response));
+    }
 
-        $this->gateway->onStop($server);
+    private function handleClient(Client $client, Request $request, Response $response): void
+    {
+        $client->onClose(function (ClientMetadata $metadata): void {
+            if (!$metadata->closedByPeer) {
+                return;
+            }
 
-        if (!empty($exceptions)) {
-            throw new CompositeException($exceptions, 'Websocket shutdown failed');
+            switch ($metadata->closeCode) {
+                case Code::PROTOCOL_ERROR:
+                case Code::UNACCEPTABLE_TYPE:
+                case Code::POLICY_VIOLATION:
+                case Code::INCONSISTENT_FRAME_DATA_TYPE:
+                case Code::MESSAGE_TOO_LARGE:
+                case Code::EXPECTED_EXTENSION_MISSING:
+                case Code::BAD_GATEWAY:
+                    $this->logger->notice(\sprintf(
+                        'Client initiated websocket close reporting error (code: %d): %s',
+                        $metadata->closeCode,
+                        $metadata->closeReason,
+                    ));
+            }
+        });
+
+        $this->gateway->addClient($client, $request, $response);
+
+        try {
+            $this->clientHandler->handleClient($this->gateway, $client, $request, $response);
+        } catch (ClosedException $exception) {
+            // Ignore ClosedExceptions thrown from closing the client while streaming a message.
+        } catch (\Throwable $exception) {
+            $this->logger->error((string) $exception);
+            $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+            return;
+        }
+
+        if (!$client->isClosed()) {
+            $client->close(Code::NORMAL_CLOSE, 'Closing connection');
         }
     }
 }

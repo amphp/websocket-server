@@ -5,6 +5,8 @@
 
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
+use Amp\Http\Server\DefaultErrorHandler;
+use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -16,10 +18,10 @@ use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
 use Amp\Websocket\Client;
+use Amp\Websocket\Server\ClientGateway;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\Websocket;
-use Amp\Websocket\Server\WebsocketServerObserver;
 use Monolog\Logger;
 use Revolt\EventLoop;
 use function Amp\ByteStream\getStdout;
@@ -36,14 +38,26 @@ $server = new SocketHttpServer($logger);
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
-$websocket = new Websocket($server, new class ($server) implements ClientHandler, WebsocketServerObserver {
+$gateway = new ClientGateway();
+$errorHandler = new DefaultErrorHandler();
+
+$clientHandler = new class ($server, $gateway, $errorHandler) implements ClientHandler {
     private string $watcher;
     private ?int $newestQuestion = null;
 
-    public function onStart(HttpServer $server, Gateway $gateway): void
+    public function __construct(
+        HttpServer $server,
+        private readonly Gateway $gateway,
+        private readonly ErrorHandler $errorHandler,
+    ) {
+        $server->onStart($this->onStart(...));
+        $server->onStop($this->onStop(...));
+    }
+
+    public function onStart(): void
     {
         $client = HttpClientBuilder::buildDefault();
-        $this->watcher = EventLoop::repeat(10, function () use ($client, $gateway): void {
+        $this->watcher = EventLoop::repeat(10, function () use ($client): void {
             $response = $client->request(
                 new ClientRequest('https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=stackoverflow')
             );
@@ -58,13 +72,13 @@ $websocket = new Websocket($server, new class ($server) implements ClientHandler
             foreach (\array_reverse($data['items']) as $question) {
                 if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
                     $this->newestQuestion = $question['question_id'];
-                    $gateway->broadcast(\json_encode($question));
+                    $this->gateway->broadcast(\json_encode($question));
                 }
             }
         });
     }
 
-    public function onStop(HttpServer $server, Gateway $gateway): void
+    public function onStop(): void
     {
         EventLoop::cancel($this->watcher);
     }
@@ -72,7 +86,7 @@ $websocket = new Websocket($server, new class ($server) implements ClientHandler
     public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-            return $gateway->getErrorHandler()->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
+            return $this->errorHandler->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
         }
 
         return $response;
@@ -84,7 +98,9 @@ $websocket = new Websocket($server, new class ($server) implements ClientHandler
             // Messages received on the connection are ignored and discarded.
         }
     }
-});
+};
+
+$websocket = new Websocket($logger, $clientHandler, $gateway);
 
 $router = new Router($server);
 $router->addRoute('GET', '/broadcast', $websocket);
