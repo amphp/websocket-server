@@ -15,7 +15,9 @@ use Amp\Socket;
 use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
+use Amp\Websocket\Server\EmptyHandshakeHandler;
 use Amp\Websocket\Server\Gateway;
+use Amp\Websocket\Server\HandshakeHandler;
 use Amp\Websocket\Server\Websocket;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
@@ -50,7 +52,7 @@ class WebsocketTest extends AsyncTestCase
         $socket->write($this->writeRequest($request));
 
         EventLoop::queue(function () use ($socket): void {
-            while (null !== $socket->read());
+            while (null !== $socket->read()) ;
         });
 
         $deferred->getFuture()
@@ -61,29 +63,27 @@ class WebsocketTest extends AsyncTestCase
 
     protected function createWebsocketServer(
         ClientFactory $factory,
-        callable $onConnect
+        \Closure $clientHandler
     ): SocketHttpServer {
         $logger = new NullLogger();
         $httpServer = new SocketHttpServer($logger);
 
-        $websocket = new Websocket($logger, new class($onConnect) implements ClientHandler {
-            private $onConnect;
+        $websocket = new Websocket(
+            logger: $logger,
+            handshakeHandler: new EmptyHandshakeHandler(),
+            clientHandler: new class ($clientHandler) implements ClientHandler {
+                public function __construct(
+                    private readonly \Closure $clientHandler,
+                ) {
+                }
 
-            public function __construct(callable $onConnect)
-            {
-                $this->onConnect = $onConnect;
-            }
-
-            public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
-            {
-                return $response;
-            }
-
-            public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
-            {
-                ($this->onConnect)($gateway, $client);
-            }
-        }, clientFactory: $factory);
+                public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
+                {
+                    ($this->clientHandler)($gateway, $client);
+                }
+            },
+            clientFactory: $factory,
+        );
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));
 
@@ -94,16 +94,16 @@ class WebsocketTest extends AsyncTestCase
 
     /**
      * @param Request $request Request initiating the handshake.
-     * @param int     $status Expected status code.
-     * @param array   $expectedHeaders Expected response headers.
+     * @param int $status Expected status code.
+     * @param array $expectedHeaders Expected response headers.
      *
      * @dataProvider provideHandshakes
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): void
     {
-        $clientHandler = $this->createMock(ClientHandler::class);
+        $handshakeHandler = $this->createMock(HandshakeHandler::class);
 
-        $clientHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
+        $handshakeHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
             ->willReturnCallback(function (Gateway $endpoint, Request $request, Response $response): Response {
                 return $response;
@@ -112,7 +112,7 @@ class WebsocketTest extends AsyncTestCase
         $logger = new NullLogger;
         $server = new SocketHttpServer($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
-        $websocket = new Websocket($logger, $clientHandler);
+        $websocket = new Websocket($logger, $handshakeHandler, $this->createMock(ClientHandler::class));
         $server->start($websocket);
 
         try {
@@ -154,13 +154,11 @@ class WebsocketTest extends AsyncTestCase
         );
     }
 
-    public function provideHandshakes(): array
+    public function provideHandshakes(): iterable
     {
-        $testCases = [];
-
         // 0 ----- valid Handshake request -------------------------------------------------------->
         $request = $this->createRequest();
-        $testCases['Valid'] = [$request, Status::SWITCHING_PROTOCOLS, [
+        yield 'Valid' => [$request, Status::SWITCHING_PROTOCOLS, [
             "upgrade" => ["websocket"],
             "connection" => ["upgrade"],
             "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
@@ -169,39 +167,37 @@ class WebsocketTest extends AsyncTestCase
         // 1 ----- error conditions: Handshake with POST method ----------------------------------->
         $request = $this->createRequest();
         $request->setMethod("POST");
-        $testCases['POST'] = [$request, Status::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
+        yield 'POST' => [$request, Status::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
 
         // 2 ----- error conditions: Handshake with 1.0 protocol ---------------------------------->
         $request = $this->createRequest();
         $request->setProtocolVersion("1.0");
-        $testCases['HTTP/1.0 Protocol'] = [$request, Status::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
+        yield 'HTTP/1.0 Protocol' => [$request, Status::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
         $request = $this->createRequest();
         $request->setBody(new ByteStream\ReadableBuffer("Non-empty body"));
-        $testCases['Non-empty Body'] = [$request, Status::BAD_REQUEST];
+        yield 'Non-empty Body' => [$request, Status::BAD_REQUEST];
 
         // 4 ----- error conditions: Upgrade: Websocket header required --------------------------->
         $request = $this->createRequest();
         $request->setHeader("upgrade", "no websocket!");
-        $testCases['No Upgrade Header'] = [$request, Status::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
+        yield 'No Upgrade Header' => [$request, Status::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
 
         // 5 ----- error conditions: Connection: Upgrade header required -------------------------->
         $request = $this->createRequest();
         $request->setHeader("connection", "no upgrade!");
-        $testCases['No Connection Header'] = [$request, Status::UPGRADE_REQUIRED];
+        yield 'No Connection Header' => [$request, Status::UPGRADE_REQUIRED];
 
         // 6 ----- error conditions: Sec-Websocket-Key header required ---------------------------->
         $request = $this->createRequest();
         $request->removeHeader("sec-websocket-key");
-        $testCases['No Sec-websocket-key Header'] = [$request, Status::BAD_REQUEST];
+        yield 'No Sec-websocket-key Header' => [$request, Status::BAD_REQUEST];
 
         // 7 ----- error conditions: Sec-Websocket-Version header must be 13 ---------------------->
         $request = $this->createRequest();
         $request->setHeader("sec-websocket-version", "12");
-        $testCases['Invalid Sec-websocket-version Header'] = [$request, Status::BAD_REQUEST, ["sec-websocket-version" => ["13"]]];
-
-        return $testCases;
+        yield 'Invalid Sec-websocket-version Header' => [$request, Status::BAD_REQUEST, ["sec-websocket-version" => ["13"]]];
     }
 
     public function testBroadcast(): void

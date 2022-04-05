@@ -1,19 +1,16 @@
 <?php
 
-// Note that this example requires amphp/artax, amphp/http-server-router,
+// Note that this example requires amphp/http-client, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
-use Amp\Http\Server\DefaultErrorHandler;
-use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
-use Amp\Http\Status;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
@@ -21,6 +18,7 @@ use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientGateway;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
+use Amp\Websocket\Server\OriginHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use Revolt\EventLoop;
@@ -39,16 +37,18 @@ $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $gateway = new ClientGateway();
-$errorHandler = new DefaultErrorHandler();
 
-$clientHandler = new class ($server, $gateway, $errorHandler) implements ClientHandler {
+$handshakeHandler = new OriginHandshakeHandler(
+    ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
+);
+
+$clientHandler = new class ($server, $gateway) implements ClientHandler {
     private string $watcher;
     private ?int $newestQuestion = null;
 
     public function __construct(
         HttpServer $server,
         private readonly Gateway $gateway,
-        private readonly ErrorHandler $errorHandler,
     ) {
         $server->onStart($this->onStart(...));
         $server->onStop($this->onStop(...));
@@ -83,15 +83,6 @@ $clientHandler = new class ($server, $gateway, $errorHandler) implements ClientH
         EventLoop::cancel($this->watcher);
     }
 
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
-    {
-        if (!\in_array($request->getHeader('origin'), ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'], true)) {
-            return $this->errorHandler->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
-        }
-
-        return $response;
-    }
-
     public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
     {
         while ($message = $client->receive()) {
@@ -100,7 +91,12 @@ $clientHandler = new class ($server, $gateway, $errorHandler) implements ClientH
     }
 };
 
-$websocket = new Websocket($logger, $clientHandler, $gateway);
+$websocket = new Websocket(
+    logger: $logger,
+    handshakeHandler: $handshakeHandler,
+    clientHandler: $clientHandler,
+    gateway: $gateway,
+);
 
 $router = new Router($server);
 $router->addRoute('GET', '/broadcast', $websocket);

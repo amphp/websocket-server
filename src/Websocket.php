@@ -20,6 +20,7 @@ final class Websocket implements RequestHandler
 {
     public function __construct(
         private readonly PsrLogger $logger,
+        private readonly HandshakeHandler $handshakeHandler,
         private readonly ClientHandler $clientHandler,
         private readonly Gateway $gateway = new ClientGateway(),
         private readonly ClientFactory $clientFactory = new Rfc6455ClientFactory(),
@@ -38,7 +39,7 @@ final class Websocket implements RequestHandler
             return $response;
         }
 
-        $response = $this->clientHandler->handleHandshake($this->gateway, $request, $response);
+        $response = $this->handshakeHandler->handleHandshake($this->gateway, $request, $response);
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
             $response->removeHeader('connection');
