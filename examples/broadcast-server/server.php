@@ -3,6 +3,7 @@
 // Note that this example requires amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
 
+use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -31,6 +32,8 @@ $server = new SocketHttpServer($logger);
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
+$errorHandler = new DefaultErrorHandler();
+
 $handshakeHandler = new OriginHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
@@ -46,11 +49,11 @@ $clientHandler = new class implements ClientHandler {
 
 $websocket = new Websocket($logger, $handshakeHandler, $clientHandler);
 
-$router = new Router($server);
+$router = new Router($server, $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);
-$router->setFallback(new DocumentRoot($server, __DIR__ . '/public'));
+$router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 
-$server->start($router);
+$server->start($router, $errorHandler);
 
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);

@@ -5,6 +5,7 @@
 
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request as ClientRequest;
+use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
@@ -37,6 +38,8 @@ $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $gateway = new ClientGateway();
+
+$errorHandler = new DefaultErrorHandler();
 
 $handshakeHandler = new OriginHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
@@ -100,11 +103,11 @@ $websocket = new Websocket(
     gateway: $gateway,
 );
 
-$router = new Router($server);
+$router = new Router($server, $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);
-$router->setFallback(new DocumentRoot($server, __DIR__ . '/public'));
+$router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 
-$server->start($router);
+$server->start($router, $errorHandler);
 
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
