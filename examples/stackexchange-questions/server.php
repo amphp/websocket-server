@@ -43,7 +43,7 @@ $handshakeHandler = new OriginHandshakeHandler(
 );
 
 $clientHandler = new class ($server, $gateway) implements ClientHandler {
-    private string $watcher;
+    private ?string $watcher = null;
     private ?int $newestQuestion = null;
 
     public function __construct(
@@ -80,7 +80,9 @@ $clientHandler = new class ($server, $gateway) implements ClientHandler {
 
     public function onStop(): void
     {
-        EventLoop::cancel($this->watcher);
+        if ($this->watcher) {
+            EventLoop::cancel($this->watcher);
+        }
     }
 
     public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void

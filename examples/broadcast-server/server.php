@@ -12,7 +12,6 @@ use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
 use Amp\Websocket\Client;
-use Amp\Websocket\Message;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\OriginHandshakeHandler;
@@ -40,7 +39,6 @@ $clientHandler = new class implements ClientHandler {
     public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
     {
         while ($message = $client->receive()) {
-            \assert($message instanceof Message);
             $gateway->broadcast(\sprintf('%d: %s', $client->getId(), $message->buffer()));
         }
     }

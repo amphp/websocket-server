@@ -51,7 +51,7 @@ final class ClientGateway implements Gateway
             $futures[$id] = $sender->send($data, $binary);
         }
 
-        return async(static fn () => Future\settle($futures));
+        return async(Future\awaitAll(...), $futures);
     }
 
     public function broadcastBinary(string $data, array $exceptIds = []): Future
@@ -74,18 +74,10 @@ final class ClientGateway implements Gateway
             $sender = $this->senders[$id];
             $futures[$id] = $sender->send($data, $binary);
         }
-        return async(static fn () => Future\settle($futures));
+
+        return async(Future\awaitAll(...), $futures);
     }
 
-    /**
-     * Send a binary message to a set of clients.
-     *
-     * @param string $data Data to send.
-     * @param int[] $clientIds Array of client IDs.
-     *
-     * @return Future<array> Resolves once the message has been sent to all clients. Note it is
-     *                       generally undesirable to await this future in a coroutine.
-     */
     public function multicastBinary(string $data, array $clientIds): Future
     {
         return $this->multicastData($data, true, $clientIds);

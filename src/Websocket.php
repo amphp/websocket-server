@@ -18,6 +18,9 @@ use Revolt\EventLoop;
 
 final class Websocket implements RequestHandler
 {
+    /**
+     * @param CompressionContextFactory|null $compressionFactory Use null to disable compression.
+     */
     public function __construct(
         private readonly PsrLogger $logger,
         private readonly HandshakeHandler $handshakeHandler,
@@ -31,8 +34,6 @@ final class Websocket implements RequestHandler
 
     public function handleRequest(Request $request): Response
     {
-        \assert($this->logger !== null);
-
         $response = $this->upgradeHandler->handleRequest($request);
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
@@ -68,34 +69,36 @@ final class Websocket implements RequestHandler
 
     private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
     {
-        \assert($this->logger !== null);
-
         $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
 
         $socketResource = $socket->getResource();
 
         // Setting via stream API doesn't work and TLS streams are not supported
         // once TLS is enabled
-        $isNodelayChangeSupported = $socketResource !== null
+        $isNodelayChangeSupported = \is_resource($socketResource)
             && !isset(\stream_get_meta_data($socketResource)["crypto"])
             && \function_exists('socket_import_stream')
             && \defined('TCP_NODELAY');
 
         if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
-            /** @noinspection PhpComposerExtensionStubsInspection */
-            @\socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1); // error suppression for sockets which don't support the option
+            \set_error_handler(static fn () => true);
+            try {
+                // error suppression for sockets which don't support the option
+                \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
+            } finally {
+                \restore_error_handler();
+            }
         }
 
-        // @formatter:off
-        /** @noinspection SuspiciousBinaryOperationInspection */
+        /** @psalm-suppress  RedundantCondition */
         \assert($this->logger->debug(\sprintf(
-                'Upgraded %s #%d to websocket connection #%d',
-                $socket->getRemoteAddress()->toString(),
-                $socket->getClient()->getId(),
-                $client->getId()
-            )) || true);
-        // @formatter:on
-        EventLoop::queue(fn () => $this->handleClient($client, $request, $response));
+            'Upgraded %s #%d to websocket connection #%d',
+            $socket->getRemoteAddress()->toString(),
+            $socket->getClient()->getId(),
+            $client->getId(),
+        )) || true);
+
+        EventLoop::queue($this->handleClient(...), $client, $request, $response);
     }
 
     private function handleClient(Client $client, Request $request, Response $response): void
@@ -116,16 +119,16 @@ final class Websocket implements RequestHandler
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d): %s',
                         $metadata->closeCode,
-                        $metadata->closeReason,
+                        $metadata->closeReason ?? 'Unknown reason',
                     ));
             }
         });
 
-        $this->gateway->addClient($client, $request, $response);
-
         try {
+            $this->gateway->addClient($client, $request, $response);
+
             $this->clientHandler->handleClient($this->gateway, $client, $request, $response);
-        } catch (ClosedException $exception) {
+        } catch (ClosedException) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);

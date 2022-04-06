@@ -19,11 +19,6 @@ final class Rfc6455UpgradeHandler implements RequestHandler
 
     public function handleRequest(Request $request): Response
     {
-        \assert(isset($this->errorHandler), \sprintf(
-            "Can't handle WebSocket handshake because %s::onStart() was not called by the server",
-            self::class
-        ));
-
         if ($request->getMethod() !== 'GET') {
             $response = $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
             $response->setHeader('allow', 'GET');
