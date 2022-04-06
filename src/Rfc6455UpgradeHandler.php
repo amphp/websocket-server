@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket\Server;
 
-use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
@@ -12,27 +11,38 @@ use function Amp\Websocket\generateAcceptFromKey;
 
 final class Rfc6455UpgradeHandler implements RequestHandler
 {
-    public function __construct(
-        private readonly ErrorHandler $errorHandler = new DefaultErrorHandler(),
-    ) {
+    private readonly ErrorHandler $errorHandler;
+
+    public function __construct(?ErrorHandler $errorHandler = null)
+    {
+        $this->errorHandler = $errorHandler
+            ?? new class implements ErrorHandler {
+                public function handleError(
+                    int $status,
+                    ?string $reason = null,
+                    ?Request $request = null
+                ): Response {
+                    return new Response($status, ['connection' => 'close']);
+                }
+            };
     }
 
     public function handleRequest(Request $request): Response
     {
         if ($request->getMethod() !== 'GET') {
-            $response = $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, null, $request);
+            $response = $this->errorHandler->handleError(Status::METHOD_NOT_ALLOWED, request: $request);
             $response->setHeader('allow', 'GET');
             return $response;
         }
 
         if ($request->getProtocolVersion() !== '1.1') {
-            $response = $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, null, $request);
+            $response = $this->errorHandler->handleError(Status::HTTP_VERSION_NOT_SUPPORTED, request: $request);
             $response->setHeader('upgrade', 'websocket');
             return $response;
         }
 
         if ('' !== $request->getBody()->buffer()) {
-            return $this->errorHandler->handleError(Status::BAD_REQUEST, null, $request);
+            return $this->errorHandler->handleError(Status::BAD_REQUEST, request: $request);
         }
 
         $hasUpgradeWebsocket = false;
@@ -43,7 +53,7 @@ final class Rfc6455UpgradeHandler implements RequestHandler
             }
         }
         if (!$hasUpgradeWebsocket) {
-            $response = $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, null, $request);
+            $response = $this->errorHandler->handleError(Status::UPGRADE_REQUIRED, request: $request);
             $response->setHeader('upgrade', 'websocket');
             return $response;
         }
