@@ -6,6 +6,7 @@ use Amp\ByteStream;
 use Amp\DeferredFuture;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
+use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
@@ -87,7 +88,7 @@ class WebsocketTest extends AsyncTestCase
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));
 
-        $httpServer->start($websocket);
+        $httpServer->start($websocket, $this->createMock(ErrorHandler::class));
 
         return $httpServer;
     }
@@ -113,7 +114,7 @@ class WebsocketTest extends AsyncTestCase
         $server = new SocketHttpServer($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
         $websocket = new Websocket($logger, $handshakeHandler, $this->createMock(ClientHandler::class));
-        $server->start($websocket);
+        $server->start($websocket, $this->createMock(ErrorHandler::class));
 
         try {
             $response = $websocket->handleRequest($request);
