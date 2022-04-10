@@ -104,6 +104,14 @@ final class Websocket implements RequestHandler
     private function handleClient(Client $client, Request $request, Response $response): void
     {
         $client->onClose(function (ClientMetadata $metadata): void {
+            /** @psalm-suppress  RedundantCondition */
+            \assert($this->logger->debug(\sprintf(
+                'Closed websocket connection #%d (code: %d) %s',
+                $metadata->id,
+                $metadata->closeCode ?? 0,
+                $metadata->closeReason ?? '',
+            )) || true);
+
             if (!$metadata->closedByPeer) {
                 return;
             }
@@ -117,9 +125,9 @@ final class Websocket implements RequestHandler
                 case Code::EXPECTED_EXTENSION_MISSING:
                 case Code::BAD_GATEWAY:
                     $this->logger->notice(\sprintf(
-                        'Client initiated websocket close reporting error (code: %d): %s',
+                        'Client initiated websocket close reporting error (code: %d) %s',
                         $metadata->closeCode,
-                        $metadata->closeReason ?? 'Unknown reason',
+                        $metadata->closeReason ?? '',
                     ));
             }
         });
