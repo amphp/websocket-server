@@ -21,10 +21,9 @@ interface ClientHandler
      * }
      * ```
      *
-     * @param Gateway $gateway The associated websocket endpoint to which the client is connected.
      * @param WebsocketClient $client The websocket client connection.
      * @param Request $request The HTTP request that instigated the connection.
      * @param Response $response The HTTP response sent to client to accept the connection.
      */
-    public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void;
+    public function handleClient(WebsocketClient $client, Request $request, Response $response): void;
 }

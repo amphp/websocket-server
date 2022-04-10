@@ -21,12 +21,11 @@ interface HandshakeHandler
      * the server error handler accessible from Endpoint::getErrorHandler() to generate
      * an error response, e.g., return $endpoint->getErrorHandler()->handleError(403).
      *
-     * @param Gateway  $gateway  The associated websocket endpoint to which the client is connecting.
      * @param Request  $request  The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Response Return a Response with a status code other tha {@link Status::SWITCHING_PROTOCOLS} to deny the
      *                  handshake Request.
      */
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response;
+    public function handleHandshake(Request $request, Response $response): Response;
 }

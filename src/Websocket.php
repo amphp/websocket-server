@@ -25,7 +25,6 @@ final class Websocket implements RequestHandler
         private readonly PsrLogger $logger,
         private readonly HandshakeHandler $handshakeHandler,
         private readonly ClientHandler $clientHandler,
-        private readonly Gateway $gateway = new ClientGateway(),
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
         private readonly ?CompressionContextFactory $compressionFactory = null,
@@ -40,7 +39,7 @@ final class Websocket implements RequestHandler
             return $response;
         }
 
-        $response = $this->handshakeHandler->handleHandshake($this->gateway, $request, $response);
+        $response = $this->handshakeHandler->handleHandshake($request, $response);
 
         if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
             $response->removeHeader('connection');
@@ -133,9 +132,7 @@ final class Websocket implements RequestHandler
         });
 
         try {
-            $this->gateway->addClient($client, $request, $response);
-
-            $this->clientHandler->handleClient($this->gateway, $client, $request, $response);
+            $this->clientHandler->handleClient($client, $request, $response);
         } catch (ClosedException) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {

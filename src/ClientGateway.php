@@ -3,8 +3,6 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Future;
-use Amp\Http\Server\Request;
-use Amp\Http\Server\Response;
 use Amp\Websocket\WebsocketClient;
 use Amp\Websocket\WebsocketClientMetadata;
 use function Amp\async;
@@ -17,7 +15,7 @@ final class ClientGateway implements Gateway
     /** @var array<int, Internal\AsyncSender> Senders indexed by client ID. */
     private array $senders = [];
 
-    public function addClient(WebsocketClient $client, Request $request, Response $response): void
+    public function addClient(WebsocketClient $client): void
     {
         $id = $client->getId();
         $this->clients[$id] = $client;

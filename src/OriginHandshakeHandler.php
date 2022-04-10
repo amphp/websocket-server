@@ -19,7 +19,7 @@ final class OriginHandshakeHandler implements HandshakeHandler
     ) {
     }
 
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
+    public function handleHandshake(Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), $this->allowedOrigins, true)) {
             return $this->errorHandler->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);

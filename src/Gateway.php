@@ -3,8 +3,6 @@
 namespace Amp\Websocket\Server;
 
 use Amp\Future;
-use Amp\Http\Server\Request;
-use Amp\Http\Server\Response;
 use Amp\Websocket\WebsocketClient;
 
 interface Gateway
@@ -76,7 +74,7 @@ interface Gateway
     public function getClients(): array;
 
     /**
-     * Add a client to this Gateway. This method generally should not be called by a {@see ClientHandler}.
+     * Add a client to this Gateway.
      */
-    public function addClient(WebsocketClient $client, Request $request, Response $response): void;
+    public function addClient(WebsocketClient $client): void;
 }

@@ -7,7 +7,7 @@ use Amp\Http\Server\Response;
 
 final class EmptyHandshakeHandler implements HandshakeHandler
 {
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
+    public function handleHandshake(Request $request, Response $response): Response
     {
         return $response;
     }

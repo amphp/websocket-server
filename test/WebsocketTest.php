@@ -13,6 +13,7 @@ use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
+use Amp\Websocket\Server\ClientGateway;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\EmptyHandshakeHandler;
 use Amp\Websocket\Server\Gateway;
@@ -27,7 +28,10 @@ use Revolt\EventLoop;
 
 class WebsocketTest extends AsyncTestCase
 {
-    protected function execute(callable $onConnect, WebsocketClient $client): void
+    /**
+     * @param \Closure(Gateway, WebsocketClient):void $onConnect
+     */
+    protected function execute(\Closure $onConnect, WebsocketClient $client): void
     {
         \assert($client instanceof MockObject);
 
@@ -62,9 +66,13 @@ class WebsocketTest extends AsyncTestCase
             ->await();
     }
 
+    /**
+     * @param \Closure(Gateway, WebsocketClient):void $clientHandler
+     */
     protected function createWebsocketServer(
         WebsocketClientFactory $factory,
-        \Closure $clientHandler
+        \Closure $clientHandler,
+        Gateway $gateway = new ClientGateway(),
     ): SocketHttpServer {
         $logger = new NullLogger();
         $httpServer = new SocketHttpServer($logger);
@@ -72,15 +80,17 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             logger: $logger,
             handshakeHandler: new EmptyHandshakeHandler(),
-            clientHandler: new class($clientHandler) implements ClientHandler {
+            clientHandler: new class($clientHandler, $gateway) implements ClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
+                    private readonly Gateway $gateway,
                 ) {
                 }
 
-                public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
+                public function handleClient(WebsocketClient $client, Request $request, Response $response): void
                 {
-                    ($this->clientHandler)($gateway, $client);
+                    $this->gateway->addClient($client);
+                    ($this->clientHandler)($this->gateway, $client);
                 }
             },
             clientFactory: $factory,
@@ -106,7 +116,7 @@ class WebsocketTest extends AsyncTestCase
 
         $handshakeHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
-            ->willReturnCallback(function (Gateway $endpoint, Request $request, Response $response): Response {
+            ->willReturnCallback(function (Request $request, Response $response): Response {
                 return $response;
             });
 

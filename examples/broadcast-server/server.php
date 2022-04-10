@@ -12,6 +12,7 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
+use Amp\Websocket\Server\ClientGateway;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\OriginHandshakeHandler;
@@ -39,10 +40,17 @@ $handshakeHandler = new OriginHandshakeHandler(
 );
 
 $clientHandler = new class implements ClientHandler {
-    public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
+    public function __construct(
+        private readonly Gateway $gateway = new ClientGateway(),
+    ) {
+    }
+
+    public function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
+        $this->gateway->addClient($client);
+
         while ($message = $client->receive()) {
-            $gateway->broadcast(\sprintf('%d: %s', $client->getId(), $message->buffer()));
+            $this->gateway->broadcast(\sprintf('%d: %s', $client->getId(), $message->buffer()));
         }
     }
 };

@@ -37,21 +37,19 @@ $server = new SocketHttpServer($logger);
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
-$gateway = new ClientGateway();
-
 $errorHandler = new DefaultErrorHandler();
 
 $handshakeHandler = new OriginHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 
-$clientHandler = new class($server, $gateway) implements ClientHandler {
+$clientHandler = new class($server) implements ClientHandler {
     private ?string $watcher = null;
     private ?int $newestQuestion = null;
 
     public function __construct(
         HttpServer $server,
-        private readonly Gateway $gateway,
+        private readonly Gateway $gateway = new ClientGateway(),
     ) {
         $server->onStart($this->onStart(...));
         $server->onStop($this->onStop(...));
@@ -88,8 +86,10 @@ $clientHandler = new class($server, $gateway) implements ClientHandler {
         }
     }
 
-    public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
+    public function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
+        $this->gateway->addClient($client);
+
         while ($message = $client->receive()) {
             // Messages received on the connection are ignored and discarded.
         }
@@ -100,7 +100,6 @@ $websocket = new Websocket(
     logger: $logger,
     handshakeHandler: $handshakeHandler,
     clientHandler: $clientHandler,
-    gateway: $gateway,
 );
 
 $router = new Router($server, $errorHandler);
