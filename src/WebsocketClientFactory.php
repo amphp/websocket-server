@@ -5,10 +5,10 @@ namespace Amp\Websocket\Server;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
-use Amp\Websocket\Client;
 use Amp\Websocket\CompressionContext;
+use Amp\Websocket\WebsocketClient;
 
-interface ClientFactory
+interface WebsocketClientFactory
 {
     /**
      * Creates a Client object based on the given Request.
@@ -18,12 +18,12 @@ interface ClientFactory
      * @param Socket $socket
      * @param CompressionContext|null $compressionContext
      *
-     * @return Client
+     * @return WebsocketClient
      */
     public function createClient(
         Request $request,
         Response $response,
         Socket $socket,
         ?CompressionContext $compressionContext = null,
-    ): Client;
+    ): WebsocketClient;
 }

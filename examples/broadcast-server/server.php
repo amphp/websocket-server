@@ -4,19 +4,19 @@
 // amphp/http-server-static-content and amphp/log to be installed.
 
 use Amp\Http\Server\DefaultErrorHandler;
-use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\Router;
+use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
-use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\OriginHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
 
@@ -39,7 +39,7 @@ $handshakeHandler = new OriginHandshakeHandler(
 );
 
 $clientHandler = new class implements ClientHandler {
-    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
+    public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
     {
         while ($message = $client->receive()) {
             $gateway->broadcast(\sprintf('%d: %s', $client->getId(), $message->buffer()));

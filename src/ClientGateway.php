@@ -5,25 +5,25 @@ namespace Amp\Websocket\Server;
 use Amp\Future;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Websocket\Client;
-use Amp\Websocket\ClientMetadata;
+use Amp\Websocket\WebsocketClient;
+use Amp\Websocket\WebsocketClientMetadata;
 use function Amp\async;
 
 final class ClientGateway implements Gateway
 {
-    /** @var array<int, Client> Indexed by client ID. */
+    /** @var array<int, WebsocketClient> Indexed by client ID. */
     private array $clients = [];
 
     /** @var array<int, Internal\AsyncSender> Senders indexed by client ID. */
     private array $senders = [];
 
-    public function addClient(Client $client, Request $request, Response $response): void
+    public function addClient(WebsocketClient $client, Request $request, Response $response): void
     {
         $id = $client->getId();
         $this->clients[$id] = $client;
         $this->senders[$id] = new Internal\AsyncSender($client);
 
-        $client->onClose(function (ClientMetadata $metadata): void {
+        $client->onClose(function (WebsocketClientMetadata $metadata): void {
             $id = $metadata->id;
             unset($this->clients[$id], $this->senders[$id]);
         });
@@ -83,9 +83,6 @@ final class ClientGateway implements Gateway
         return $this->multicastData($data, true, $clientIds);
     }
 
-    /**
-     * @return Client[] Array of Client objects currently connected to this endpoint indexed by their IDs.
-     */
     public function getClients(): array
     {
         return $this->clients;

@@ -4,7 +4,7 @@ namespace Amp\Websocket\Server\Internal;
 
 use Amp\DeferredFuture;
 use Amp\Future;
-use Amp\Websocket\Client;
+use Amp\Websocket\WebsocketClient;
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 
@@ -17,7 +17,7 @@ final class AsyncSender
 
     private bool $active = true;
 
-    public function __construct(Client $client)
+    public function __construct(WebsocketClient $client)
     {
         $this->writeQueue = $writeQueue = new \SplQueue;
 

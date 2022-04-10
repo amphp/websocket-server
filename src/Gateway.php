@@ -5,7 +5,7 @@ namespace Amp\Websocket\Server;
 use Amp\Future;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Websocket\Client;
+use Amp\Websocket\WebsocketClient;
 
 interface Gateway
 {
@@ -70,12 +70,13 @@ interface Gateway
     public function multicastBinary(string $data, array $clientIds): Future;
 
     /**
-     * @return Client[] Array of Client objects currently connected to this endpoint indexed by their IDs.
+     * @return WebsocketClient[] Array of {@see WebsocketClient} objects currently connected to this endpoint indexed
+     * by their IDs.
      */
     public function getClients(): array;
 
     /**
      * Add a client to this Gateway. This method generally should not be called by a {@see ClientHandler}.
      */
-    public function addClient(Client $client, Request $request, Response $response): void;
+    public function addClient(WebsocketClient $client, Request $request, Response $response): void;
 }

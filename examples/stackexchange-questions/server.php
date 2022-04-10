@@ -15,12 +15,12 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
-use Amp\Websocket\Client;
 use Amp\Websocket\Server\ClientGateway;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\OriginHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
 use Revolt\EventLoop;
 use function Amp\ByteStream\getStdout;
@@ -45,7 +45,7 @@ $handshakeHandler = new OriginHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 
-$clientHandler = new class ($server, $gateway) implements ClientHandler {
+$clientHandler = new class($server, $gateway) implements ClientHandler {
     private ?string $watcher = null;
     private ?int $newestQuestion = null;
 
@@ -57,7 +57,7 @@ $clientHandler = new class ($server, $gateway) implements ClientHandler {
         $server->onStop($this->onStop(...));
     }
 
-    public function onStart(): void
+    private function onStart(): void
     {
         $client = HttpClientBuilder::buildDefault();
         $this->watcher = EventLoop::repeat(10, function () use ($client): void {
@@ -81,14 +81,14 @@ $clientHandler = new class ($server, $gateway) implements ClientHandler {
         });
     }
 
-    public function onStop(): void
+    private function onStop(): void
     {
         if ($this->watcher) {
             EventLoop::cancel($this->watcher);
         }
     }
 
-    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
+    public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
     {
         while ($message = $client->receive()) {
             // Messages received on the connection are ignored and discarded.

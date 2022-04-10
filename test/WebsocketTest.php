@@ -13,13 +13,13 @@ use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
-use Amp\Websocket\Client;
-use Amp\Websocket\Server\ClientFactory;
 use Amp\Websocket\Server\ClientHandler;
 use Amp\Websocket\Server\EmptyHandshakeHandler;
 use Amp\Websocket\Server\Gateway;
 use Amp\Websocket\Server\HandshakeHandler;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketClientFactory;
+use Amp\Websocket\WebsocketClient;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
@@ -27,11 +27,11 @@ use Revolt\EventLoop;
 
 class WebsocketTest extends AsyncTestCase
 {
-    protected function execute(callable $onConnect, Client $client): void
+    protected function execute(callable $onConnect, WebsocketClient $client): void
     {
         \assert($client instanceof MockObject);
 
-        $factory = $this->createMock(ClientFactory::class);
+        $factory = $this->createMock(WebsocketClientFactory::class);
         $factory->method('createClient')
             ->willReturn($client);
 
@@ -39,7 +39,7 @@ class WebsocketTest extends AsyncTestCase
 
         $webserver = $this->createWebsocketServer(
             $factory,
-            function (Gateway $gateway, Client $client) use ($onConnect, $deferred): void {
+            function (Gateway $gateway, WebsocketClient $client) use ($onConnect, $deferred): void {
                 $deferred->complete($onConnect($gateway, $client));
             }
         );
@@ -63,7 +63,7 @@ class WebsocketTest extends AsyncTestCase
     }
 
     protected function createWebsocketServer(
-        ClientFactory $factory,
+        WebsocketClientFactory $factory,
         \Closure $clientHandler
     ): SocketHttpServer {
         $logger = new NullLogger();
@@ -72,13 +72,13 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             logger: $logger,
             handshakeHandler: new EmptyHandshakeHandler(),
-            clientHandler: new class ($clientHandler) implements ClientHandler {
+            clientHandler: new class($clientHandler) implements ClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
                 ) {
                 }
 
-                public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
+                public function handleClient(Gateway $gateway, WebsocketClient $client, Request $request, Response $response): void
                 {
                     ($this->clientHandler)($gateway, $client);
                 }
@@ -203,7 +203,7 @@ class WebsocketTest extends AsyncTestCase
 
     public function testBroadcast(): void
     {
-        $client = $this->createMock(Client::class);
+        $client = $this->createMock(WebsocketClient::class);
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
@@ -215,7 +215,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isClosed')
             ->willReturn(false);
 
-        $this->execute(function (Gateway $gateway, Client $client) {
+        $this->execute(function (Gateway $gateway, WebsocketClient $client) {
             $gateway->broadcast('Text')->await();
             $gateway->broadcastBinary('Binary')->await();
         }, $client);
@@ -223,7 +223,7 @@ class WebsocketTest extends AsyncTestCase
 
     public function testBroadcastExcept(): void
     {
-        $client = $this->createMock(Client::class);
+        $client = $this->createMock(WebsocketClient::class);
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->never())
@@ -233,7 +233,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isClosed')
             ->willReturn(false);
 
-        $this->execute(function (Gateway $gateway, Client $client) {
+        $this->execute(function (Gateway $gateway, WebsocketClient $client) {
             $gateway->broadcast('Text', [$client->getId()])->await();
             $gateway->broadcastBinary('Binary', [$client->getId()])->await();
         }, $client);
@@ -241,7 +241,7 @@ class WebsocketTest extends AsyncTestCase
 
     public function testMulticast(): void
     {
-        $client = $this->createMock(Client::class);
+        $client = $this->createMock(WebsocketClient::class);
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
@@ -253,7 +253,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('isClosed')
             ->willReturn(false);
 
-        $this->execute(function (Gateway $gateway, Client $client) {
+        $this->execute(function (Gateway $gateway, WebsocketClient $client) {
             $gateway->multicast('Text', [$client->getId()])->await();
             $gateway->multicastBinary('Binary', [$client->getId()])->await();
         }, $client);

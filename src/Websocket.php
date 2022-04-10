@@ -7,12 +7,12 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
-use Amp\Websocket\Client;
-use Amp\Websocket\ClientMetadata;
+use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
-use Amp\Websocket\Code;
 use Amp\Websocket\CompressionContext;
 use Amp\Websocket\CompressionContextFactory;
+use Amp\Websocket\WebsocketClient;
+use Amp\Websocket\WebsocketClientMetadata;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 
@@ -26,7 +26,7 @@ final class Websocket implements RequestHandler
         private readonly HandshakeHandler $handshakeHandler,
         private readonly ClientHandler $clientHandler,
         private readonly Gateway $gateway = new ClientGateway(),
-        private readonly ClientFactory $clientFactory = new Rfc6455ClientFactory(),
+        private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
         private readonly ?CompressionContextFactory $compressionFactory = null,
     ) {
@@ -101,9 +101,9 @@ final class Websocket implements RequestHandler
         EventLoop::queue($this->handleClient(...), $client, $request, $response);
     }
 
-    private function handleClient(Client $client, Request $request, Response $response): void
+    private function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
-        $client->onClose(function (ClientMetadata $metadata): void {
+        $client->onClose(function (WebsocketClientMetadata $metadata): void {
             /** @psalm-suppress  RedundantCondition */
             \assert($this->logger->debug(\sprintf(
                 'Closed websocket connection #%d (code: %d) %s',
@@ -117,13 +117,13 @@ final class Websocket implements RequestHandler
             }
 
             switch ($metadata->closeCode) {
-                case Code::PROTOCOL_ERROR:
-                case Code::UNACCEPTABLE_TYPE:
-                case Code::POLICY_VIOLATION:
-                case Code::INCONSISTENT_FRAME_DATA_TYPE:
-                case Code::MESSAGE_TOO_LARGE:
-                case Code::EXPECTED_EXTENSION_MISSING:
-                case Code::BAD_GATEWAY:
+                case CloseCode::PROTOCOL_ERROR:
+                case CloseCode::UNACCEPTABLE_TYPE:
+                case CloseCode::POLICY_VIOLATION:
+                case CloseCode::INCONSISTENT_FRAME_DATA_TYPE:
+                case CloseCode::MESSAGE_TOO_LARGE:
+                case CloseCode::EXPECTED_EXTENSION_MISSING:
+                case CloseCode::BAD_GATEWAY:
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d) %s',
                         $metadata->closeCode,
@@ -140,12 +140,12 @@ final class Websocket implements RequestHandler
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error((string) $exception);
-            $client->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+            $client->close(CloseCode::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
             return;
         }
 
         if (!$client->isClosed()) {
-            $client->close(Code::NORMAL_CLOSE, 'Closing connection');
+            $client->close(CloseCode::NORMAL_CLOSE, 'Closing connection');
         }
     }
 }
