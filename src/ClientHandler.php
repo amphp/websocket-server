@@ -11,13 +11,12 @@ interface ClientHandler
     /**
      * This method is called when a new websocket connection is established on the endpoint.
      * The method may handle all messages itself or pass the connection along to a separate
-     * handler if desired. The client connection is closed when the promise returned from
-     * this method resolves.
+     * handler if desired. The client connection is closed when this method returns.
      *
      * ```
      * while ($message = $client->receive()) {
      *     $payload = $message->buffer();
-     *     await($client->send('Message of length ' . strlen($payload) . 'received'));
+     *     $client->send('Message of length ' . strlen($payload) . ' received');
      * }
      * ```
      *

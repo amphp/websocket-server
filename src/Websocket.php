@@ -76,7 +76,7 @@ final class Websocket implements RequestHandler
         // once TLS is enabled
         $isNodelayChangeSupported = \is_resource($socketResource)
             && !isset(\stream_get_meta_data($socketResource)["crypto"])
-            && \function_exists('socket_import_stream')
+            && \extension_loaded('sockets')
             && \defined('TCP_NODELAY');
 
         if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
@@ -136,7 +136,16 @@ final class Websocket implements RequestHandler
         } catch (ClosedException) {
             // Ignore ClosedExceptions thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
-            $this->logger->error((string) $exception);
+            $this->logger->error(
+                \sprintf(
+                    "Unexpected %s thrown from %s::handleClient(), closing websocket connection from %s.",
+                    $exception::class,
+                    $this->clientHandler::class,
+                    $client->getRemoteAddress()->toString(),
+                ),
+                ['exception' => $exception],
+            );
+
             $client->close(CloseCode::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
             return;
         }
