@@ -63,9 +63,6 @@ final class AsyncSender
     }
 
     /**
-     * @param string $data
-     * @param bool $binary
-     *
      * @return Future<void>
      */
     public function send(string $data, bool $binary): Future

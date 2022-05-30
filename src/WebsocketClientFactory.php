@@ -12,13 +12,6 @@ interface WebsocketClientFactory
 {
     /**
      * Creates a Client object based on the given Request.
-     *
-     * @param Request $request
-     * @param Response $response
-     * @param Socket $socket
-     * @param CompressionContext|null $compressionContext
-     *
-     * @return WebsocketClient
      */
     public function createClient(
         Request $request,

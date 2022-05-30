@@ -39,7 +39,7 @@
         "amphp/http-server-static-content": "^2",
         "amphp/http-server-router": "^2",
         "amphp/log": "^2",
-        "amphp/php-cs-fixer-config": "dev-master",
+        "amphp/php-cs-fixer-config": "^2",
         "amphp/phpunit-util": "^3",
         "league/climate": "^3",
         "phpunit/phpunit": "^9",
