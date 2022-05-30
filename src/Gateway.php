@@ -18,7 +18,7 @@ interface Gateway
      * sends that failed and an array with keys corresponding to client IDs of successful sends.
      * Note it is generally undesirable to await this future in a coroutine.
      *
-     * @see Future\settle() Completion array corresponds to the return of this function.
+     * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
     public function broadcast(string $data, array $exceptIds = []): Future;
 
@@ -33,7 +33,7 @@ interface Gateway
      * sends that failed and an array with keys corresponding to client IDs of successful sends.
      * Note it is generally undesirable to await this future in a coroutine.
      *
-     * @see Future\settle() Completion array corresponds to the return of this function.
+     * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
     public function broadcastBinary(string $data, array $exceptIds = []): Future;
 
@@ -48,7 +48,7 @@ interface Gateway
      * sends that failed and an array with keys corresponding to client IDs of successful sends.
      * Note it is generally undesirable to await this future in a coroutine.
      *
-     * @see Future\settle() Completion array corresponds to the return of this function.
+     * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
     public function multicast(string $data, array $clientIds): Future;
 
@@ -63,7 +63,7 @@ interface Gateway
      * sends that failed and an array with keys corresponding to client IDs of successful sends.
      * Note it is generally undesirable to await this future in a coroutine.
      *
-     * @see Future\settle() Completion array corresponds to the return of this function.
+     * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
     public function multicastBinary(string $data, array $clientIds): Future;
 
