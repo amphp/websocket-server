@@ -4,7 +4,6 @@ namespace Amp\Websocket\Server;
 
 use Amp\Future;
 use Amp\Websocket\WebsocketClient;
-use Amp\Websocket\WebsocketClientMetadata;
 use function Amp\async;
 
 final class ClientGateway implements Gateway
@@ -21,8 +20,7 @@ final class ClientGateway implements Gateway
         $this->clients[$id] = $client;
         $this->senders[$id] = new Internal\AsyncSender($client);
 
-        $client->onClose(function (WebsocketClientMetadata $metadata): void {
-            $id = $metadata->id;
+        $client->onClose(function () use ($id): void {
             unset($this->clients[$id], $this->senders[$id]);
         });
     }

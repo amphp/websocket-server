@@ -15,50 +15,57 @@ final class AsyncSender
 
     private ?Suspension $suspension = null;
 
-    private bool $active = true;
+    private ?WebsocketClient $client;
 
     public function __construct(WebsocketClient $client)
     {
+        $this->client = $client;
         $this->writeQueue = $writeQueue = new \SplQueue;
 
         $suspension = &$this->suspension;
-        $active = &$this->active;
-        EventLoop::queue(static function () use ($client, $writeQueue, &$suspension, &$active): void {
-            while ($active && !$client->isClosed()) {
+        $destination = &$this->client;
+        EventLoop::queue(static function () use ($writeQueue, &$suspension, &$destination): void {
+            while ($destination && !$destination->isClosed()) {
                 if ($writeQueue->isEmpty()) {
                     $suspension = EventLoop::getSuspension();
-                    $suspension->suspend();
-                }
-
-                while (!$writeQueue->isEmpty() && !$client->isClosed()) {
-                    /**
-                     * @var DeferredFuture $deferredFuture
-                     * @var string $data
-                     * @var bool $binary
-                     */
-                    [$deferredFuture, $data, $binary] = $writeQueue->shift();
-
-                    try {
-                        $binary ? $client->sendBinary($data) : $client->send($data);
-                        $deferredFuture->complete();
-                    } catch (\Throwable $exception) {
-                        $active = false;
-                        $deferredFuture->error($exception);
-                        while (!$writeQueue->isEmpty()) {
-                            [$deferredFuture] = $writeQueue->shift();
-                            $deferredFuture->error($exception);
-                        }
+                    if (!$suspension->suspend()) {
                         return;
                     }
                 }
+
+                self::dequeue($writeQueue, $destination);
             }
         });
     }
 
+    private static function dequeue(\SplQueue $writeQueue, WebsocketClient $client): void
+    {
+        while (!$writeQueue->isEmpty() && !$client->isClosed()) {
+            /**
+             * @var DeferredFuture $deferredFuture
+             * @var string $data
+             * @var bool $binary
+             */
+            [$deferredFuture, $data, $binary] = $writeQueue->dequeue();
+
+            try {
+                $binary ? $client->sendBinary($data) : $client->send($data);
+                $deferredFuture->complete();
+            } catch (\Throwable $exception) {
+                $deferredFuture->error($exception);
+                while (!$writeQueue->isEmpty()) {
+                    [$deferredFuture] = $writeQueue->dequeue();
+                    $deferredFuture->error($exception);
+                }
+                return;
+            }
+        }
+    }
+
     public function __destruct()
     {
-        $this->active = false;
-        $this->suspension?->resume();
+        $this->client = null;
+        $this->suspension?->resume(false);
         $this->suspension = null;
     }
 
@@ -68,8 +75,8 @@ final class AsyncSender
     public function send(string $data, bool $binary): Future
     {
         $deferredFuture = new DeferredFuture();
-        $this->writeQueue->push([$deferredFuture, $data, $binary]);
-        $this->suspension?->resume();
+        $this->writeQueue->enqueue([$deferredFuture, $data, $binary]);
+        $this->suspension?->resume(true);
         $this->suspension = null;
 
         return $deferredFuture->getFuture();
