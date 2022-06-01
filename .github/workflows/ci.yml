@@ -82,3 +82,11 @@ jobs:
       - name: Run composer-require-checker
         run: php composer-require-checker.phar check composer.json --config-file $PWD/composer-require-check.json
         if: runner.os != 'Windows' && matrix.composer-require-checker-version != 'none'
+
+      - name: Autobahn
+        if: runner.os == 'Linux'
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          docker run -ti -d --rm -v ${PWD}:/app --net="host" --name amp-websocket-server php:8.1-cli php /app/test-autobahn/server.php
+          docker run -ti --rm -v ${PWD}/test-autobahn/config:/config -v ${PWD}/test-autobahn/reports:/reports --net="host" --name fuzzingclient crossbario/autobahn-testsuite wstest -m fuzzingclient -s config/fuzzingclient.json
+          php test-autobahn/report.php
