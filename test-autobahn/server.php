@@ -2,50 +2,51 @@
 
 require \dirname(__DIR__) . "/vendor/autoload.php";
 
-use Amp\Http\Server\HttpServer;
+use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
+use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket;
-use Amp\Websocket\Client;
-use Amp\Websocket\Message;
-use Amp\Websocket\Options;
 use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Gateway;
+use Amp\Websocket\Server\EmptyHandshakeHandler;
+use Amp\Websocket\Server\Rfc6455ClientFactory;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\WebsocketClient;
 use Psr\Log\NullLogger;
 
 /* --- http://localhost:9001/ ------------------------------------------------------------------- */
 
-$options = Options::createServerDefault()
-    ->withBytesPerSecondLimit(\PHP_INT_MAX)
-    ->withFrameSizeLimit(\PHP_INT_MAX)
-    ->withFramesPerSecondLimit(\PHP_INT_MAX)
-    ->withMessageSizeLimit(\PHP_INT_MAX)
-    ->withValidateUtf8(true);
+$logger = new NullLogger();
 
-$websocket = new Websocket(new class implements ClientHandler {
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Response
-    {
-        return $response;
-    }
-
-    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): void
-    {
-        while ($message = $client->receive()) {
-            \assert($message instanceof Message);
-            if ($message->isBinary()) {
-                $gateway->broadcastBinary($message->buffer())->await();
-            } else {
-                $gateway->broadcast($message->buffer())->await();
+$websocket = new Websocket(
+    logger: $logger,
+    handshakeHandler: new EmptyHandshakeHandler(),
+    clientHandler: new class implements ClientHandler {
+        public function handleClient(WebsocketClient $client, Request $request, Response $response): void
+        {
+            while ($message = $client->receive()) {
+                if ($message->isBinary()) {
+                    $client->sendBinary($message->buffer());
+                } else {
+                    $client->send($message->buffer());
+                }
             }
         }
-    }
-}, $options);
+    },
+    clientFactory: new Rfc6455ClientFactory(
+        heartbeatQueue: null,
+        rateLimiter: null,
+        validateUtf8: true,
+        messageSizeLimit: \PHP_INT_MAX,
+        frameSizeLimit: \PHP_INT_MAX,
+    ),
+);
 
-$server = new HttpServer([Socket\listen("127.0.0.1:9001")], $websocket, new NullLogger);
+$server = new SocketHttpServer($logger);
+$server->expose(new Socket\InternetAddress("127.0.0.1", 9001));
 
-$server->start();
+$server->start($websocket, new DefaultErrorHandler());
 
-$signal = Amp\trapSignal([\SIGINT, \SIGTERM, \SIGSTOP]);
+$input = Amp\ByteStream\getStdin()->read();
 
 $server->stop();
