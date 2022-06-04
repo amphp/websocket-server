@@ -51,7 +51,7 @@ class WebsocketTest extends AsyncTestCase
 
         EventLoop::queue(function () use ($socket): void {
             while (null !== $socket->read()) {
-                ;
+                // discard
             }
         });
 
