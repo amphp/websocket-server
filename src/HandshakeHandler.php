@@ -16,13 +16,17 @@ interface HandshakeHandler
      * given Response object) and all handshakes will be automatically accepted. See
      * {@see EmptyHandshakeHandler} for such an implementation.
      *
+     * Most web applications should check the {@code origin} header to restrict access,
+     * as websocket connections aren't subject to browser's same-origin-policy. See
+     * {@see OriginHandshakeHandler} for such an implementation.
+     *
      * This method provides an opportunity to set application-specific headers, including
      * cookies, on the websocket response. Although any non-101 status code can be used
      * to reject the websocket connection, we generally recommended using a 4xx status
      * code that is descriptive of why the handshake was rejected. It is suggested that an
      * instance of {@see ErrorHandler} is used to generate such a response.
      *
-     * @param Request  $request  The HTTP request that instigated the handshake
+     * @param Request $request The HTTP request that instigated the handshake
      * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Response Return a response with a status code other than
