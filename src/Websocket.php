@@ -19,7 +19,7 @@ use Revolt\EventLoop;
 final class Websocket implements RequestHandler
 {
     /**
-     * @param CompressionContextFactory|null $compressionFactory Use null to disable compression.
+     * @param CompressionContextFactory|null $compressionContextFactory Use null to disable compression.
      */
     public function __construct(
         private readonly PsrLogger $logger,
@@ -27,7 +27,7 @@ final class Websocket implements RequestHandler
         private readonly ClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
-        private readonly ?CompressionContextFactory $compressionFactory = null,
+        private readonly ?CompressionContextFactory $compressionContextFactory = null,
     ) {
     }
 
@@ -49,11 +49,11 @@ final class Websocket implements RequestHandler
         }
 
         $compressionContext = null;
-        if ($this->compressionFactory) {
+        if ($this->compressionContextFactory) {
             $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
 
             foreach ($extensions as $extension) {
-                if ($compressionContext = $this->compressionFactory->fromClientHeader($extension, $headerLine)) {
+                if ($compressionContext = $this->compressionContextFactory->fromClientHeader($extension, $headerLine)) {
                     /** @psalm-suppress PossiblyNullArgument */
                     $response->setHeader('sec-websocket-extensions', $headerLine);
                     break;
