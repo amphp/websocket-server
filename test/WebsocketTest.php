@@ -1,6 +1,6 @@
 <?php
 
-namespace Amp\Websocket\Server\Test;
+namespace Amp\Websocket\Server;
 
 use Amp\ByteStream;
 use Amp\DeferredFuture;
@@ -13,13 +13,6 @@ use Amp\Http\Server\SocketHttpServer;
 use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
-use Amp\Websocket\Server\ClientGateway;
-use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\EmptyHandshakeHandler;
-use Amp\Websocket\Server\Gateway;
-use Amp\Websocket\Server\HandshakeHandler;
-use Amp\Websocket\Server\Websocket;
-use Amp\Websocket\Server\WebsocketClientFactory;
 use Amp\Websocket\WebsocketClient;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
@@ -57,7 +50,9 @@ class WebsocketTest extends AsyncTestCase
         $socket->write($this->writeRequest($request));
 
         EventLoop::queue(function () use ($socket): void {
-            while (null !== $socket->read()) ;
+            while (null !== $socket->read()) {
+                ;
+            }
         });
 
         $deferred->getFuture()
@@ -169,11 +164,15 @@ class WebsocketTest extends AsyncTestCase
     {
         // 0 ----- valid Handshake request -------------------------------------------------------->
         $request = $this->createRequest();
-        yield 'Valid' => [$request, Status::SWITCHING_PROTOCOLS, [
-            "upgrade" => ["websocket"],
-            "connection" => ["upgrade"],
-            "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
-        ]];
+        yield 'Valid' => [
+            $request,
+            Status::SWITCHING_PROTOCOLS,
+            [
+                "upgrade" => ["websocket"],
+                "connection" => ["upgrade"],
+                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+            ],
+        ];
 
         // 1 ----- error conditions: Handshake with POST method ----------------------------------->
         $request = $this->createRequest();
@@ -208,7 +207,11 @@ class WebsocketTest extends AsyncTestCase
         // 7 ----- error conditions: Sec-Websocket-Version header must be 13 ---------------------->
         $request = $this->createRequest();
         $request->setHeader("sec-websocket-version", "12");
-        yield 'Invalid Sec-websocket-version Header' => [$request, Status::BAD_REQUEST, ["sec-websocket-version" => ["13"]]];
+        yield 'Invalid Sec-websocket-version Header' => [
+            $request,
+            Status::BAD_REQUEST,
+            ["sec-websocket-version" => ["13"]],
+        ];
     }
 
     public function testBroadcast(): void
