@@ -34,11 +34,6 @@ final class ClientGateway implements Gateway
     {
         $exceptIdLookup = \array_flip($exceptIds);
 
-        /** @psalm-suppress DocblockTypeContradiction array_flip() can return null. */
-        if ($exceptIdLookup === null) {
-            throw new \ValueError('Unable to array_flip() the passed IDs');
-        }
-
         $futures = [];
         foreach ($this->senders as $id => $sender) {
             if (isset($exceptIdLookup[$id])) {
