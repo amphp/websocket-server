@@ -11,7 +11,7 @@ interface Gateway
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).
      *
      * @param string $data Data to send.
-     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
+     * @param int[] $excludedClientIds List of IDs to exclude from the broadcast.
      *
      * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
      * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
@@ -20,13 +20,13 @@ interface Gateway
      *
      * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
-    public function broadcast(string $data, array $exceptIds = []): Future;
+    public function broadcast(string $data, array $excludedClientIds = []): Future;
 
     /**
      * Send a binary message to all clients (except those given in the optional array).
      *
      * @param string $data Data to send.
-     * @param int[]  $exceptIds List of IDs to exclude from the broadcast.
+     * @param int[] $excludedClientIds List of IDs to exclude from the broadcast.
      *
      * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
      * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
@@ -35,13 +35,13 @@ interface Gateway
      *
      * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
-    public function broadcastBinary(string $data, array $exceptIds = []): Future;
+    public function broadcastBinary(string $data, array $excludedClientIds = []): Future;
 
     /**
      * Send a UTF-8 text message to a set of clients.
      *
      * @param string $data Data to send.
-     * @param int[]  $clientIds Array of client IDs.
+     * @param int[] $clientIds Array of client IDs.
      *
      * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
      * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of
@@ -56,7 +56,7 @@ interface Gateway
      * Send a binary message to a set of clients.
      *
      * @param string $data Data to send.
-     * @param int[]  $clientIds Array of client IDs.
+     * @param int[] $clientIds Array of client IDs.
      *
      * @return Future<array{array<int, \Throwable>, array<int, null>}> Completes once the message has been sent to all
      * clients. The completion value is an array containing two arrays: an array of exceptions indexed by client ID of

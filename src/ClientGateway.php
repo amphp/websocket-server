@@ -25,18 +25,18 @@ final class ClientGateway implements Gateway
         });
     }
 
-    public function broadcast(string $data, array $exceptIds = []): Future
+    public function broadcast(string $data, array $excludedClientIds = []): Future
     {
-        return $this->broadcastData($data, false, $exceptIds);
+        return $this->broadcastData($data, false, $excludedClientIds);
     }
 
-    private function broadcastData(string $data, bool $binary, array $exceptIds = []): Future
+    private function broadcastData(string $data, bool $binary, array $excludedClientIds = []): Future
     {
-        $exceptIdLookup = \array_flip($exceptIds);
+        $exclusionLookup = \array_flip($excludedClientIds);
 
         $futures = [];
         foreach ($this->senders as $id => $sender) {
-            if (isset($exceptIdLookup[$id])) {
+            if (isset($exclusionLookup[$id])) {
                 continue;
             }
             $futures[$id] = $sender->send($data, $binary);
@@ -45,9 +45,9 @@ final class ClientGateway implements Gateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function broadcastBinary(string $data, array $exceptIds = []): Future
+    public function broadcastBinary(string $data, array $excludedClientIds = []): Future
     {
-        return $this->broadcastData($data, true, $exceptIds);
+        return $this->broadcastData($data, true, $excludedClientIds);
     }
 
     public function multicast(string $data, array $clientIds): Future
