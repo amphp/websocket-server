@@ -5,7 +5,7 @@ namespace Amp\Websocket\Server;
 use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 
-interface Gateway
+interface WebsocketGateway
 {
     /**
      * Broadcast a UTF-8 text message to all clients (except those given in the optional array).

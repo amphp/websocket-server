@@ -6,7 +6,7 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Websocket\WebsocketClient;
 
-interface ClientHandler
+interface WebsocketClientHandler
 {
     /**
      * This method is called when a new websocket connection is established on the endpoint.

@@ -12,11 +12,11 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
-use Amp\Websocket\Server\ClientGateway;
-use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Gateway;
-use Amp\Websocket\Server\OriginHandshakeHandler;
+use Amp\Websocket\Server\ClientWebsocketGateway;
+use Amp\Websocket\Server\OriginWebsocketHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketClientHandler;
+use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -35,13 +35,13 @@ $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $errorHandler = new DefaultErrorHandler();
 
-$handshakeHandler = new OriginHandshakeHandler(
+$handshakeHandler = new OriginWebsocketHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 
-$clientHandler = new class implements ClientHandler {
+$clientHandler = new class implements WebsocketClientHandler {
     public function __construct(
-        private readonly Gateway $gateway = new ClientGateway(),
+        private readonly WebsocketGateway $gateway = new ClientWebsocketGateway(),
     ) {
     }
 

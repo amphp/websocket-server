@@ -23,8 +23,8 @@ final class Websocket implements RequestHandler
      */
     public function __construct(
         private readonly PsrLogger $logger,
-        private readonly HandshakeHandler $handshakeHandler,
-        private readonly ClientHandler $clientHandler,
+        private readonly WebsocketHandshakeHandler $handshakeHandler,
+        private readonly WebsocketClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
         private readonly ?CompressionContextFactory $compressionContextFactory = null,
@@ -61,13 +61,19 @@ final class Websocket implements RequestHandler
             }
         }
 
-        $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext));
+        $response->upgrade(
+            fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext)
+        );
 
         return $response;
     }
 
-    private function reapClient(UpgradedSocket $socket, Request $request, Response $response, ?CompressionContext $compressionContext): void
-    {
+    private function reapClient(
+        UpgradedSocket $socket,
+        Request $request,
+        Response $response,
+        ?CompressionContext $compressionContext
+    ): void {
         $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
 
         $socketResource = $socket->getResource();

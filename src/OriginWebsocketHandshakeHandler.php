@@ -8,7 +8,7 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
 
-final class OriginHandshakeHandler implements HandshakeHandler
+final class OriginWebsocketHandshakeHandler implements WebsocketHandshakeHandler
 {
     /**
      * @param list<string> $allowedOrigins

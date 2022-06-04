@@ -9,7 +9,7 @@ use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 
 /** @internal */
-final class AsyncSender
+final class SendQueue
 {
     /** @var \SplQueue<array{DeferredFuture, string, bool}> */
     private \SplQueue $writeQueue;

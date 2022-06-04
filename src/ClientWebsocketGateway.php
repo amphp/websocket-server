@@ -6,19 +6,19 @@ use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 use function Amp\async;
 
-final class ClientGateway implements Gateway
+final class ClientWebsocketGateway implements WebsocketGateway
 {
     /** @var array<int, WebsocketClient> Indexed by client ID. */
     private array $clients = [];
 
-    /** @var array<int, Internal\AsyncSender> Senders indexed by client ID. */
+    /** @var array<int, Internal\SendQueue> Senders indexed by client ID. */
     private array $senders = [];
 
     public function addClient(WebsocketClient $client): void
     {
         $id = $client->getId();
         $this->clients[$id] = $client;
-        $this->senders[$id] = new Internal\AsyncSender($client);
+        $this->senders[$id] = new Internal\SendQueue($client);
 
         $client->onClose(function () use ($id): void {
             unset($this->clients[$id], $this->senders[$id]);

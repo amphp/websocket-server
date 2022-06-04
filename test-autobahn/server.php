@@ -7,10 +7,10 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket;
-use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\EmptyHandshakeHandler;
+use Amp\Websocket\Server\EmptyWebsocketHandshakeHandler;
 use Amp\Websocket\Server\Rfc6455ClientFactory;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\WebsocketClient;
 use Psr\Log\NullLogger;
 
@@ -20,8 +20,8 @@ $logger = new NullLogger();
 
 $websocket = new Websocket(
     logger: $logger,
-    handshakeHandler: new EmptyHandshakeHandler(),
-    clientHandler: new class implements ClientHandler {
+    handshakeHandler: new EmptyWebsocketHandshakeHandler(),
+    clientHandler: new class implements WebsocketClientHandler {
         public function handleClient(WebsocketClient $client, Request $request, Response $response): void
         {
             while ($message = $client->receive()) {

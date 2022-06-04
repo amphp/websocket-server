@@ -1,7 +1,7 @@
 # Websocket Server
 
-This library provides a [Request Handler](https://amphp.org/http-server/classes/request-handler) to easily handle Websocket 
-connections using [amphp/http-server](https://github.com/amphp/http-server).
+This library provides a [Request Handler](https://amphp.org/http-server/classes/request-handler) to easily handle
+Websocket connections using [amphp/http-server](https://github.com/amphp/http-server).
 
 ## Installation
 
@@ -11,11 +11,13 @@ This package can be installed as a [Composer](https://getcomposer.org) dependenc
 composer require amphp/websocket-server
 ```
 
-> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you have any feedback.
+> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you
+> have any feedback.
 
 ## Documentation
 
-The documentation for this library is currently a work in progress. Pull Requests to improve the documentation are always welcome!
+The documentation for this library is currently a work in progress. Pull Requests to improve the documentation are
+always welcome!
 
 ## Requirements
 
@@ -44,8 +46,8 @@ use Amp\Socket\Server;
 use Amp\Success;
 use Amp\Websocket\Client;
 use Amp\Websocket\Message;
-use Amp\Websocket\Server\ClientHandler;
-use Amp\Websocket\Server\Gateway;
+use Amp\Websocket\Server\WebsocketClientHandler;
+use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\Server\Websocket;
 use Monolog\Logger;
 use function Amp\ByteStream\getStdout;
@@ -53,14 +55,14 @@ use function Amp\call;
 
 require __DIR__ . '/vendor/autoload.php';
 
-$websocket = new Websocket(new class implements ClientHandler {
+$websocket = new Websocket(new class implements WebsocketClientHandler {
     private const ALLOWED_ORIGINS = [
         'http://localhost:1337',
         'http://127.0.0.1:1337',
         'http://[::1]:1337'
     ];
     
-    public function handleHandshake(Gateway $gateway, Request $request, Response $response): Promise
+    public function handleHandshake(WebsocketGateway $gateway, Request $request, Response $response): Promise
     {
         if (!\in_array($request->getHeader('origin'), self::ALLOWED_ORIGINS, true)) {
             return $gateway->getErrorHandler()->handleError(403);
@@ -69,7 +71,7 @@ $websocket = new Websocket(new class implements ClientHandler {
         return new Success($response);
     }
 
-    public function handleClient(Gateway $gateway, Client $client, Request $request, Response $response): Promise
+    public function handleClient(WebsocketGateway $gateway, Client $client, Request $request, Response $response): Promise
     {
         return call(function () use ($gateway, $client): \Generator {
             while ($message = yield $client->receive()) {
