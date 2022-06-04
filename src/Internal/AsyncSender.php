@@ -8,6 +8,7 @@ use Amp\Websocket\WebsocketClient;
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 
+/** @internal */
 final class AsyncSender
 {
     /** @var \SplQueue<array{DeferredFuture, string, bool}> */
