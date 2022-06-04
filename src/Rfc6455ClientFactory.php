@@ -18,12 +18,12 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
     public function __construct(
         private readonly ?HeartbeatQueue $heartbeatQueue = new DefaultHeartbeatQueue(),
         private readonly ?RateLimiter $rateLimiter = new DefaultRateLimiter(),
-        private readonly bool $textOnly = WebsocketClient::DEFAULT_TEXT_ONLY,
-        private readonly bool $validateUtf8 = WebsocketClient::DEFAULT_VALIDATE_UTF8,
-        private readonly int $messageSizeLimit = WebsocketClient::DEFAULT_MESSAGE_SIZE_LIMIT,
-        private readonly int $frameSizeLimit = WebsocketClient::DEFAULT_FRAME_SIZE_LIMIT,
-        private readonly int $frameSplitThreshold = WebsocketClient::DEFAULT_FRAME_SPLIT_THRESHOLD,
-        private readonly float $closePeriod = WebsocketClient::DEFAULT_CLOSE_PERIOD,
+        private readonly bool $textOnly = Rfc6455Client::DEFAULT_TEXT_ONLY,
+        private readonly bool $validateUtf8 = Rfc6455Client::DEFAULT_VALIDATE_UTF8,
+        private readonly int $messageSizeLimit = Rfc6455Client::DEFAULT_MESSAGE_SIZE_LIMIT,
+        private readonly int $frameSizeLimit = Rfc6455Client::DEFAULT_FRAME_SIZE_LIMIT,
+        private readonly int $frameSplitThreshold = Rfc6455Client::DEFAULT_FRAME_SPLIT_THRESHOLD,
+        private readonly float $closePeriod = Rfc6455Client::DEFAULT_CLOSE_PERIOD,
     ) {
     }
 
