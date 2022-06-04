@@ -11,9 +11,6 @@ This package can be installed as a [Composer](https://getcomposer.org) dependenc
 composer require amphp/websocket-server
 ```
 
-> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you
-> have any feedback.
-
 ## Documentation
 
 The documentation for this library is currently a work in progress. Pull Requests to improve the documentation are
