@@ -1,7 +1,7 @@
 # Websocket Server
 
-This library provides a [Request Handler](https://amphp.org/http-server/classes/request-handler) to easily handle Websocket 
-connections using [amphp/http-server](https://github.com/amphp/http-server).
+This library provides a [`RequestHandler`](https://amphp.org/http-server/classes/request-handler) to easily handle
+Websocket connections using [`amphp/http-server`](https://github.com/amphp/http-server).
 
 ## Installation
 
@@ -11,11 +11,10 @@ This package can be installed as a [Composer](https://getcomposer.org) dependenc
 composer require amphp/websocket-server
 ```
 
-> Currently this library is undergoing a RC phase on a push to 2.0! Please check out the 2.0 RC and let us know if you have any feedback.
-
 ## Documentation
 
-The documentation for this library is currently a work in progress. Pull Requests to improve the documentation are always welcome!
+The documentation for this library is currently a work in progress. Pull requests to improve the documentation are
+always welcome!
 
 ## Requirements
 
