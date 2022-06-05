@@ -30,6 +30,11 @@ final class WebsocketClientGateway implements WebsocketGateway
         return $this->broadcastData($data, false, $excludedClientIds);
     }
 
+    public function broadcastBinary(string $data, array $excludedClientIds = []): Future
+    {
+        return $this->broadcastData($data, true, $excludedClientIds);
+    }
+
     private function broadcastData(string $data, bool $binary, array $excludedClientIds = []): Future
     {
         $exclusionLookup = \array_flip($excludedClientIds);
@@ -45,24 +50,24 @@ final class WebsocketClientGateway implements WebsocketGateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function broadcastBinary(string $data, array $excludedClientIds = []): Future
-    {
-        return $this->broadcastData($data, true, $excludedClientIds);
-    }
-
     public function multicast(string $data, array $clientIds): Future
     {
         return $this->multicastData($data, false, $clientIds);
+    }
+
+    public function multicastBinary(string $data, array $clientIds): Future
+    {
+        return $this->multicastData($data, true, $clientIds);
     }
 
     private function multicastData(string $data, bool $binary, array $clientIds): Future
     {
         $futures = [];
         foreach ($clientIds as $id) {
-            if (!isset($this->senders[$id])) {
+            $sender = $this->senders[$id] ?? null;
+            if (!$sender) {
                 continue;
             }
-            $sender = $this->senders[$id];
             $futures[$id] = $sender->send($data, $binary);
         }
 

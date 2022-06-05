@@ -14,19 +14,16 @@ final class SendQueue
     /** @var \SplQueue<array{DeferredFuture, string, bool}> */
     private \SplQueue $writeQueue;
 
+    /** @var Suspension<bool>|null */
     private ?Suspension $suspension = null;
-
-    private ?WebsocketClient $client;
 
     public function __construct(WebsocketClient $client)
     {
-        $this->client = $client;
         $this->writeQueue = $writeQueue = new \SplQueue;
 
         $suspension = &$this->suspension;
-        $destination = &$this->client;
-        EventLoop::queue(static function () use ($writeQueue, &$suspension, &$destination): void {
-            while ($destination && !$destination->isClosed()) {
+        EventLoop::queue(static function () use ($writeQueue, $client, &$suspension): void {
+            while (!$client->isClosed()) {
                 if ($writeQueue->isEmpty()) {
                     $suspension = EventLoop::getSuspension();
                     if (!$suspension->suspend()) {
@@ -34,7 +31,7 @@ final class SendQueue
                     }
                 }
 
-                self::dequeue($writeQueue, $destination);
+                self::dequeue($writeQueue, $client);
             }
         });
     }
@@ -65,7 +62,6 @@ final class SendQueue
 
     public function __destruct()
     {
-        $this->client = null;
         $this->suspension?->resume(false);
         $this->suspension = null;
     }
