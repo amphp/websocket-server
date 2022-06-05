@@ -11,6 +11,11 @@ use Amp\Websocket\WebsocketClient;
  * such as {@see WebsocketClientGateway} is used instead of iteration over a set of clients. Sending to clients
  * individually may result in slow consuming clients (i.e., clients with messages in their send buffer) delaying
  * sending messages to other clients.
+ *
+ * Messages sent via a gateway may arrive at the websocket client out of order of those sent directly using
+ * {@see WebsocketClient::send()} or {@see WebsocketClient::sendBinary()}. If ordering of broadcast or multicast
+ * messages must be maintained with messages sent only to individual clients, always use the {@see sendAsync()} and
+ * {@see sendBinaryAsync()} methods on implementations of this interface to send to individual clients.
  */
 interface WebsocketGateway
 {
@@ -73,6 +78,24 @@ interface WebsocketGateway
      * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
     public function multicastBinary(string $data, array $clientIds): Future;
+
+    /**
+     * Send a UTF-8 text data to a single client, returning a future immediately instead of waiting to return until the
+     * data is sent as {@see WebsocketClient::send()}. This method guarantees ordering with broadcast or multicast
+     * messages.
+     *
+     * @return Future<void>
+     */
+    public function sendAsync(string $data, int $clientId): Future;
+
+    /**
+     * Send binary data to a single client, returning a future immediately instead of waiting to return until the data
+     * is sent as {@see WebsocketClient::sendBinary()}. This method guarantees ordering with broadcast or multicast
+     * messages.
+     *
+     * @return Future<void>
+     */
+    public function sendBinaryAsync(string $data, int $clientId): Future;
 
     /**
      * @return array<int, WebsocketClient> Array of {@see WebsocketClient} objects currently connected to this endpoint

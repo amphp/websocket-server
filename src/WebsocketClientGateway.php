@@ -74,9 +74,24 @@ final class WebsocketClientGateway implements WebsocketGateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function multicastBinary(string $data, array $clientIds): Future
+    public function sendAsync(string $data, int $clientId): Future
     {
-        return $this->multicastData($data, true, $clientIds);
+        return $this->sendDataAsync($data, false, $clientId);
+    }
+
+    public function sendBinaryAsync(string $data, int $clientId): Future
+    {
+        return $this->sendDataAsync($data, true, $clientId);
+    }
+
+    private function sendDataAsync(string $data, bool $binary, int $clientId): Future
+    {
+        $sender = $this->senders[$clientId] ?? null;
+        if (!$sender) {
+            return Future::error(new \Error(\sprintf('Client ID %d does not exist in the gateway', $clientId)));
+        }
+
+        return $sender->send($data, $binary);
     }
 
     public function getClients(): array

@@ -73,7 +73,7 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
             foreach (\array_reverse($data['items']) as $question) {
                 if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
                     $this->newestQuestion = $question['question_id'];
-                    $this->gateway->broadcast(\json_encode($question));
+                    $this->gateway->broadcast(\json_encode($question))->ignore();
                 }
             }
         });
