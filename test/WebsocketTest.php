@@ -67,7 +67,7 @@ class WebsocketTest extends AsyncTestCase
     protected function createWebsocketServer(
         WebsocketClientFactory $factory,
         \Closure $clientHandler,
-        WebsocketGateway $gateway = new ClientWebsocketGateway(),
+        WebsocketGateway $gateway = new WebsocketClientGateway(),
     ): SocketHttpServer {
         $logger = new NullLogger();
         $httpServer = new SocketHttpServer($logger);

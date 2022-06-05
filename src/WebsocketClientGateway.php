@@ -6,7 +6,7 @@ use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 use function Amp\async;
 
-final class ClientWebsocketGateway implements WebsocketGateway
+final class WebsocketClientGateway implements WebsocketGateway
 {
     /** @var array<int, WebsocketClient> Indexed by client ID. */
     private array $clients = [];

@@ -15,9 +15,9 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
-use Amp\Websocket\Server\ClientWebsocketGateway;
 use Amp\Websocket\Server\OriginWebsocketHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketClientGateway;
 use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
@@ -49,7 +49,7 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
 
     public function __construct(
         HttpServer $server,
-        private readonly WebsocketGateway $gateway = new ClientWebsocketGateway(),
+        private readonly WebsocketGateway $gateway = new WebsocketClientGateway(),
     ) {
         $server->onStart($this->onStart(...));
         $server->onStop($this->onStop(...));

@@ -5,6 +5,13 @@ namespace Amp\Websocket\Server;
 use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 
+/**
+ * A gateway provides methods to asynchronously send messages to a collection of clients connected to one or more
+ * websocket endpoints. When sending the same message to multiple clients, it is recommended that an implementation
+ * such as {@see WebsocketClientGateway} is used instead of iteration over a set of clients. Sending to clients
+ * individually may result in slow consuming clients (i.e., clients with messages in their send buffer) delaying
+ * sending messages to other clients.
+ */
 interface WebsocketGateway
 {
     /**
@@ -68,8 +75,8 @@ interface WebsocketGateway
     public function multicastBinary(string $data, array $clientIds): Future;
 
     /**
-     * @return WebsocketClient[] Array of {@see WebsocketClient} objects currently connected to this endpoint indexed
-     * by their IDs.
+     * @return array<int, WebsocketClient> Array of {@see WebsocketClient} objects currently connected to this endpoint
+     * indexed by their IDs.
      */
     public function getClients(): array;
 
