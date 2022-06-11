@@ -86,7 +86,7 @@ interface WebsocketGateway
      *
      * @return Future<void>
      */
-    public function sendAsync(string $data, int $clientId): Future;
+    public function send(string $data, int $clientId): Future;
 
     /**
      * Send binary data to a single client, returning a future immediately instead of waiting to return until the data
@@ -95,7 +95,7 @@ interface WebsocketGateway
      *
      * @return Future<void>
      */
-    public function sendBinaryAsync(string $data, int $clientId): Future;
+    public function sendBinary(string $data, int $clientId): Future;
 
     /**
      * @return array<int, WebsocketClient> Array of {@see WebsocketClient} objects currently connected to this endpoint

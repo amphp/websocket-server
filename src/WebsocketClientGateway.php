@@ -74,17 +74,17 @@ final class WebsocketClientGateway implements WebsocketGateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function sendAsync(string $data, int $clientId): Future
+    public function send(string $data, int $clientId): Future
     {
-        return $this->sendDataAsync($data, false, $clientId);
+        return $this->sendData($data, false, $clientId);
     }
 
-    public function sendBinaryAsync(string $data, int $clientId): Future
+    public function sendBinary(string $data, int $clientId): Future
     {
-        return $this->sendDataAsync($data, true, $clientId);
+        return $this->sendData($data, true, $clientId);
     }
 
-    private function sendDataAsync(string $data, bool $binary, int $clientId): Future
+    private function sendData(string $data, bool $binary, int $clientId): Future
     {
         $sender = $this->senders[$clientId] ?? null;
         if (!$sender) {
