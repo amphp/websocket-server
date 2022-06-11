@@ -88,7 +88,7 @@ final class WebsocketClientGateway implements WebsocketGateway
     {
         $sender = $this->senders[$clientId] ?? null;
         if (!$sender) {
-            return Future::error(new \Error(\sprintf('Client ID %d does not exist in the gateway', $clientId)));
+            return Future::complete();
         }
 
         return $sender->send($data, $binary);
