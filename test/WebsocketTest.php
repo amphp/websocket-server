@@ -4,6 +4,7 @@ namespace Amp\Websocket\Server;
 
 use Amp\ByteStream;
 use Amp\DeferredFuture;
+use Amp\Future;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\ErrorHandler;
@@ -18,6 +19,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
 use Revolt\EventLoop;
+use function Amp\delay;
 
 class WebsocketTest extends AsyncTestCase
 {
@@ -269,6 +271,29 @@ class WebsocketTest extends AsyncTestCase
         $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
             $gateway->multicast('Text', [$client->getId()])->await();
             $gateway->multicastBinary('Binary', [$client->getId()])->await();
+        }, $client);
+    }
+
+    public function testBroadcastIntermixedWithSends(): void
+    {
+        $client = $this->createMock(WebsocketClient::class);
+        $client->method('getRemoteAddress')
+            ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
+        $client->expects($this->exactly(5))
+            ->method('send')
+            ->withConsecutive(...\array_map(fn (int $index) => [(string) $index], \range(1, 5)))
+            ->willReturnCallback(static fn () => delay(0.01));
+        $client->method('isClosed')
+            ->willReturn(false);
+
+        $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
+            Future\await([
+                $gateway->broadcast('1'),
+                $gateway->send('2', $client->getId()),
+                $gateway->broadcast('3'),
+                $gateway->send('4', $client->getId()),
+                $gateway->broadcast('5'),
+            ]);
         }, $client);
     }
 }
