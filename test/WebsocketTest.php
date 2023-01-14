@@ -24,7 +24,7 @@ use function Amp\delay;
 class WebsocketTest extends AsyncTestCase
 {
     /**
-     * @param \Closure(Gateway, WebsocketClient):void $onConnect
+     * @param \Closure(WebsocketGateway, WebsocketClient):void $onConnect
      */
     protected function execute(\Closure $onConnect, WebsocketClient $client): void
     {
