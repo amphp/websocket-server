@@ -30,7 +30,7 @@ interface WebsocketHandshakeHandler
      * @param Response $response The switching protocol response for adding headers, etc.
      *
      * @return Response Return a response with a status code other than
-     * {@link Status::SWITCHING_PROTOCOLS} to deny the handshake request.
+     * {@link HttpStatus::SWITCHING_PROTOCOLS} to deny the handshake request.
      */
     public function handleHandshake(Request $request, Response $response): Response;
 }

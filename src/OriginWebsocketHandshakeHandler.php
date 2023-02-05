@@ -2,11 +2,11 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\Http\HttpStatus;
 use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
-use Amp\Http\Status;
 
 final class OriginWebsocketHandshakeHandler implements WebsocketHandshakeHandler
 {
@@ -22,7 +22,7 @@ final class OriginWebsocketHandshakeHandler implements WebsocketHandshakeHandler
     public function handleHandshake(Request $request, Response $response): Response
     {
         if (!\in_array($request->getHeader('origin'), $this->allowedOrigins, true)) {
-            return $this->errorHandler->handleError(Status::FORBIDDEN, 'Origin forbidden', $request);
+            return $this->errorHandler->handleError(HttpStatus::FORBIDDEN, 'Origin forbidden', $request);
         }
 
         return $response;

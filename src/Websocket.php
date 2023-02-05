@@ -2,11 +2,11 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\Http\HttpStatus;
 use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Http\Status;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Compression\CompressionContext;
@@ -35,13 +35,13 @@ final class Websocket implements RequestHandler
     {
         $response = $this->upgradeHandler->handleRequest($request);
 
-        if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
+        if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
             return $response;
         }
 
         $response = $this->handshakeHandler->handleHandshake($request, $response);
 
-        if ($response->getStatus() !== Status::SWITCHING_PROTOCOLS) {
+        if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
             $response->removeHeader('connection');
             $response->removeHeader('upgrade');
             $response->removeHeader('sec-websocket-accept');

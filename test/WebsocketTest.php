@@ -5,13 +5,13 @@ namespace Amp\Websocket\Server;
 use Amp\ByteStream;
 use Amp\DeferredFuture;
 use Amp\Future;
+use Amp\Http\HttpStatus;
 use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
-use Amp\Http\Status;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
 use Amp\Websocket\WebsocketClient;
@@ -110,7 +110,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $handshakeHandler = $this->createMock(WebsocketHandshakeHandler::class);
 
-        $handshakeHandler->expects($status === Status::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
+        $handshakeHandler->expects($status === HttpStatus::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')
             ->willReturnCallback(function (Request $request, Response $response): Response {
                 return $response;
@@ -126,7 +126,7 @@ class WebsocketTest extends AsyncTestCase
             $response = $websocket->handleRequest($request);
             $this->assertEquals($expectedHeaders, \array_intersect_key($response->getHeaders(), $expectedHeaders));
 
-            if ($status === Status::SWITCHING_PROTOCOLS) {
+            if ($status === HttpStatus::SWITCHING_PROTOCOLS) {
                 $this->assertEmpty(ByteStream\buffer($response->getBody()));
             }
         } finally {
@@ -167,7 +167,7 @@ class WebsocketTest extends AsyncTestCase
         $request = $this->createRequest();
         yield 'Valid' => [
             $request,
-            Status::SWITCHING_PROTOCOLS,
+            HttpStatus::SWITCHING_PROTOCOLS,
             [
                 "upgrade" => ["websocket"],
                 "connection" => ["upgrade"],
@@ -178,39 +178,39 @@ class WebsocketTest extends AsyncTestCase
         // 1 ----- error conditions: Handshake with POST method ----------------------------------->
         $request = $this->createRequest();
         $request->setMethod("POST");
-        yield 'POST' => [$request, Status::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
+        yield 'POST' => [$request, HttpStatus::METHOD_NOT_ALLOWED, ["allow" => ["GET"]]];
 
         // 2 ----- error conditions: Handshake with 1.0 protocol ---------------------------------->
         $request = $this->createRequest();
         $request->setProtocolVersion("1.0");
-        yield 'HTTP/1.0 Protocol' => [$request, Status::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
+        yield 'HTTP/1.0 Protocol' => [$request, HttpStatus::HTTP_VERSION_NOT_SUPPORTED, ["upgrade" => ["websocket"]]];
 
         // 3 ----- error conditions: Handshake with non-empty body -------------------------------->
         $request = $this->createRequest();
         $request->setBody(new ByteStream\ReadableBuffer("Non-empty body"));
-        yield 'Non-empty Body' => [$request, Status::BAD_REQUEST];
+        yield 'Non-empty Body' => [$request, HttpStatus::BAD_REQUEST];
 
         // 4 ----- error conditions: Upgrade: Websocket header required --------------------------->
         $request = $this->createRequest();
         $request->setHeader("upgrade", "no websocket!");
-        yield 'No Upgrade Header' => [$request, Status::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
+        yield 'No Upgrade Header' => [$request, HttpStatus::UPGRADE_REQUIRED, ["upgrade" => ["websocket"]]];
 
         // 5 ----- error conditions: Connection: Upgrade header required -------------------------->
         $request = $this->createRequest();
         $request->setHeader("connection", "no upgrade!");
-        yield 'No Connection Header' => [$request, Status::UPGRADE_REQUIRED];
+        yield 'No Connection Header' => [$request, HttpStatus::UPGRADE_REQUIRED];
 
         // 6 ----- error conditions: Sec-Websocket-Key header required ---------------------------->
         $request = $this->createRequest();
         $request->removeHeader("sec-websocket-key");
-        yield 'No Sec-websocket-key Header' => [$request, Status::BAD_REQUEST];
+        yield 'No Sec-websocket-key Header' => [$request, HttpStatus::BAD_REQUEST];
 
         // 7 ----- error conditions: Sec-Websocket-Version header must be 13 ---------------------->
         $request = $this->createRequest();
         $request->setHeader("sec-websocket-version", "12");
         yield 'Invalid Sec-websocket-version Header' => [
             $request,
-            Status::BAD_REQUEST,
+            HttpStatus::BAD_REQUEST,
             ["sec-websocket-version" => ["13"]],
         ];
     }
