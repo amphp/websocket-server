@@ -46,7 +46,6 @@ class WebsocketTest extends AsyncTestCase
         $server = $webserver->getServers()[0] ?? self::fail('HTTP server did not create any socket servers');
 
         $socket = Socket\connect($server->getAddress()->toString());
-        \assert($socket instanceof Socket\EncryptableSocket);
 
         $request = $this->createRequest();
         $socket->write($this->writeRequest($request));
@@ -64,7 +63,7 @@ class WebsocketTest extends AsyncTestCase
     }
 
     /**
-     * @param \Closure(Gateway, WebsocketClient):void $clientHandler
+     * @param \Closure(WebsocketGateway, WebsocketClient):void $clientHandler
      */
     protected function createWebsocketServer(
         WebsocketClientFactory $factory,
