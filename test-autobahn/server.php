@@ -7,6 +7,7 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket;
+use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Server\EmptyWebsocketHandshakeHandler;
 use Amp\Websocket\Server\Rfc6455ClientFactory;
 use Amp\Websocket\Server\Websocket;
@@ -36,9 +37,11 @@ $websocket = new Websocket(
     clientFactory: new Rfc6455ClientFactory(
         heartbeatQueue: null,
         rateLimiter: null,
-        validateUtf8: true,
-        messageSizeLimit: \PHP_INT_MAX,
-        frameSizeLimit: \PHP_INT_MAX,
+        parserFactory: new Rfc6455ParserFactory(
+            validateUtf8: true,
+            messageSizeLimit: \PHP_INT_MAX,
+            frameSizeLimit: \PHP_INT_MAX,
+        ),
     ),
 );
 
