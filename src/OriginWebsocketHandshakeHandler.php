@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\ErrorHandler;
@@ -10,6 +12,9 @@ use Amp\Http\Server\Response;
 
 final class OriginWebsocketHandshakeHandler implements WebsocketHandshakeHandler
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /**
      * @param list<string> $allowedOrigins
      */

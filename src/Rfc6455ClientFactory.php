@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
@@ -17,6 +19,9 @@ use Amp\Websocket\WebsocketClient;
 
 final class Rfc6455ClientFactory implements WebsocketClientFactory
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     public function __construct(
         private readonly ?HeartbeatQueue $heartbeatQueue = new DefaultHeartbeatQueue(),
         private readonly ?RateLimiter $rateLimiter = new DefaultRateLimiter(),

@@ -3,6 +3,8 @@
 namespace Amp\Websocket\Server\Internal;
 
 use Amp\DeferredFuture;
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 use Revolt\EventLoop;
@@ -11,6 +13,9 @@ use Revolt\EventLoop\Suspension;
 /** @internal */
 final class SendQueue
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /** @var \SplQueue<array{DeferredFuture, string, bool}> */
     private \SplQueue $writeQueue;
 

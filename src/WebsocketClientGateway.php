@@ -2,12 +2,17 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 use function Amp\async;
 
 final class WebsocketClientGateway implements WebsocketGateway
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /** @var array<int, WebsocketClient> Indexed by client ID. */
     private array $clients = [];
 

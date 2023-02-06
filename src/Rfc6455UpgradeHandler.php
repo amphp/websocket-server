@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
@@ -11,6 +13,9 @@ use function Amp\Websocket\generateAcceptFromKey;
 
 final class Rfc6455UpgradeHandler implements RequestHandler
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     private readonly ErrorHandler $errorHandler;
 
     public function __construct(?ErrorHandler $errorHandler = null)

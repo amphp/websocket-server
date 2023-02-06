@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\Request;
@@ -18,6 +20,9 @@ use Revolt\EventLoop;
 
 final class Websocket implements RequestHandler
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /**
      * @param CompressionContextFactory|null $compressionContextFactory Use null to disable compression.
      */
