@@ -32,7 +32,7 @@ $logHandler->setFormatter(new ConsoleFormatter);
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
 
-$server = new SocketHttpServer($logger);
+$server = SocketHttpServer::createForDirectAccess($logger);
 
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
@@ -103,7 +103,7 @@ $websocket = new Websocket(
 );
 
 $router = new Router($server, $errorHandler);
-$router->addRoute('GET', '/broadcast', $websocket);
+$router->addRoute('GET', '/live', $websocket);
 $router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 
 $server->start($router, $errorHandler);

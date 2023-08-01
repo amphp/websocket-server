@@ -5,8 +5,8 @@ namespace Amp\Websocket\Server;
 use Amp\ByteStream;
 use Amp\DeferredFuture;
 use Amp\Future;
+use Amp\Http\Http1\Rfc7230;
 use Amp\Http\HttpStatus;
-use Amp\Http\Rfc7230;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
@@ -71,7 +71,7 @@ class WebsocketTest extends AsyncTestCase
         WebsocketGateway $gateway = new WebsocketClientGateway(),
     ): SocketHttpServer {
         $logger = new NullLogger();
-        $httpServer = new SocketHttpServer($logger);
+        $httpServer = SocketHttpServer::createForDirectAccess($logger);
 
         $websocket = new Websocket(
             logger: $logger,
@@ -117,7 +117,7 @@ class WebsocketTest extends AsyncTestCase
             });
 
         $logger = new NullLogger;
-        $server = new SocketHttpServer($logger);
+        $server = SocketHttpServer::createForDirectAccess($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
         $websocket = new Websocket($logger, $handshakeHandler, $this->createMock(WebsocketClientHandler::class));
         $server->start($websocket, $this->createMock(ErrorHandler::class));
