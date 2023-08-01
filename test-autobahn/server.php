@@ -45,7 +45,7 @@ $websocket = new Websocket(
     ),
 );
 
-$server = new SocketHttpServer($logger);
+$server = SocketHttpServer::createForDirectAccess($logger);
 $server->expose(new Socket\InternetAddress("127.0.0.1", 9001));
 
 $server->start($websocket, new DefaultErrorHandler());
