@@ -13,4 +13,12 @@
             <directory name="vendor"/>
         </ignoreFiles>
     </projectFiles>
+
+    <issueHandlers>
+        <UnsupportedPropertyReferenceUsage>
+            <errorLevel type="suppress">
+                <directory name="src" />
+            </errorLevel>
+        </UnsupportedPropertyReferenceUsage>
+    </issueHandlers>
 </psalm>
