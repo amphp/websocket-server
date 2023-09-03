@@ -94,3 +94,12 @@ jobs:
           docker run -ti -d --rm -v ${PWD}:/app --net="host" --name amp-websocket-server php:8.2-cli php /app/test-autobahn/server.php
           docker run -ti --rm -v ${PWD}/test-autobahn/config:/config -v ${PWD}/test-autobahn/reports:/reports --net="host" --name fuzzingclient crossbario/autobahn-testsuite wstest -m fuzzingclient -s config/fuzzingclient.json
           php test-autobahn/report.php
+
+      - name: Archive autobahn artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: autobahn-results
+          retention-days: 1
+          path: |
+            test-autobahn/reports
