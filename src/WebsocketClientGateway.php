@@ -30,7 +30,7 @@ final class WebsocketClientGateway implements WebsocketGateway
         });
     }
 
-    public function broadcast(string $data, array $excludedClientIds = []): Future
+    public function broadcastText(string $data, array $excludedClientIds = []): Future
     {
         return $this->broadcastData($data, false, $excludedClientIds);
     }
@@ -55,7 +55,7 @@ final class WebsocketClientGateway implements WebsocketGateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function multicast(string $data, array $clientIds): Future
+    public function multicastText(string $data, array $clientIds): Future
     {
         return $this->multicastData($data, false, $clientIds);
     }
@@ -79,7 +79,7 @@ final class WebsocketClientGateway implements WebsocketGateway
         return async(Future\awaitAll(...), $futures);
     }
 
-    public function send(string $data, int $clientId): Future
+    public function sendText(string $data, int $clientId): Future
     {
         return $this->sendData($data, false, $clientId);
     }

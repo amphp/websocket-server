@@ -32,7 +32,7 @@ interface WebsocketGateway
      *
      * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
-    public function broadcast(string $data, array $excludedClientIds = []): Future;
+    public function broadcastText(string $data, array $excludedClientIds = []): Future;
 
     /**
      * Send a binary message to all clients (except those given in the optional array).
@@ -62,7 +62,7 @@ interface WebsocketGateway
      *
      * @see Future\awaitAll() Completion array corresponds to the return of this function.
      */
-    public function multicast(string $data, array $clientIds): Future;
+    public function multicastText(string $data, array $clientIds): Future;
 
     /**
      * Send a binary message to a set of clients.
@@ -86,7 +86,7 @@ interface WebsocketGateway
      *
      * @return Future<void>
      */
-    public function send(string $data, int $clientId): Future;
+    public function sendText(string $data, int $clientId): Future;
 
     /**
      * Send binary data to a single client, returning a future immediately instead of waiting to return until the data

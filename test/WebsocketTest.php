@@ -230,7 +230,7 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(false);
 
         $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
-            $gateway->broadcast('Text')->await();
+            $gateway->broadcastText('Text')->await();
             $gateway->broadcastBinary('Binary')->await();
         }, $client);
     }
@@ -248,7 +248,7 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(false);
 
         $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
-            $gateway->broadcast('Text', [$client->getId()])->await();
+            $gateway->broadcastText('Text', [$client->getId()])->await();
             $gateway->broadcastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
@@ -268,7 +268,7 @@ class WebsocketTest extends AsyncTestCase
             ->willReturn(false);
 
         $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
-            $gateway->multicast('Text', [$client->getId()])->await();
+            $gateway->multicastText('Text', [$client->getId()])->await();
             $gateway->multicastBinary('Binary', [$client->getId()])->await();
         }, $client);
     }
@@ -287,11 +287,11 @@ class WebsocketTest extends AsyncTestCase
 
         $this->execute(function (WebsocketGateway $gateway, WebsocketClient $client) {
             Future\await([
-                $gateway->broadcast('1'),
-                $gateway->send('2', $client->getId()),
-                $gateway->broadcast('3'),
-                $gateway->send('4', $client->getId()),
-                $gateway->broadcast('5'),
+                $gateway->broadcastText('1'),
+                $gateway->sendText('2', $client->getId()),
+                $gateway->broadcastText('3'),
+                $gateway->sendText('4', $client->getId()),
+                $gateway->broadcastText('5'),
             ]);
         }, $client);
     }

@@ -73,7 +73,7 @@ $websocket = new Websocket(new class implements WebsocketClientHandler {
         return call(function () use ($gateway, $client): \Generator {
             while ($message = yield $client->receive()) {
                 \assert($message instanceof Message);
-                $gateway->broadcast(\sprintf(
+                $gateway->broadcastText(\sprintf(
                     '%d: %s',
                     $client->getId(),
                     yield $message->buffer()

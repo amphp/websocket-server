@@ -51,7 +51,7 @@ $clientHandler = new class implements WebsocketClientHandler {
         $this->gateway->addClient($client);
 
         while ($message = $client->receive()) {
-            $this->gateway->broadcast(\sprintf('%d: %s', $client->getId(), $message->buffer()))->ignore();
+            $this->gateway->broadcastText(\sprintf('%d: %s', $client->getId(), $message->buffer()))->ignore();
         }
     }
 };
