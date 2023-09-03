@@ -29,7 +29,7 @@ $websocket = new Websocket(
                 if ($message->isBinary()) {
                     $client->sendBinary($message->buffer());
                 } else {
-                    $client->send($message->buffer());
+                    $client->sendText($message->buffer());
                 }
             }
         }
