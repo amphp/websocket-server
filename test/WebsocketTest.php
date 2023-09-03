@@ -221,7 +221,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
-            ->method('send')
+            ->method('sendText')
             ->with('Text');
         $client->expects($this->once())
             ->method('sendBinary')
@@ -241,7 +241,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->never())
-            ->method('send');
+            ->method('sendText');
         $client->expects($this->never())
             ->method('sendBinary');
         $client->method('isClosed')
@@ -259,7 +259,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->once())
-            ->method('send')
+            ->method('sendText')
             ->with('Text');
         $client->expects($this->once())
             ->method('sendBinary')
@@ -279,7 +279,7 @@ class WebsocketTest extends AsyncTestCase
         $client->method('getRemoteAddress')
             ->willReturn(new Socket\InternetAddress('127.0.0.1', 1));
         $client->expects($this->exactly(5))
-            ->method('send')
+            ->method('sendText')
             ->withConsecutive(...\array_map(fn (int $index) => [(string) $index], \range(1, 5)))
             ->willReturnCallback(static fn () => delay(0.01));
         $client->method('isClosed')
