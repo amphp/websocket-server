@@ -19,6 +19,7 @@ use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
+use Psr\Log\NullLogger;
 use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
@@ -57,7 +58,7 @@ $clientHandler = new class implements WebsocketClientHandler {
 
 $websocket = new Websocket($logger, $handshakeHandler, $clientHandler);
 
-$router = new Router($server, $errorHandler);
+$router = new Router($server, new NullLogger(), $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);
 $router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 

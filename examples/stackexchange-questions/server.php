@@ -22,6 +22,7 @@ use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
+use Psr\Log\NullLogger;
 use Revolt\EventLoop;
 use function Amp\ByteStream\getStdout;
 
@@ -102,7 +103,7 @@ $websocket = new Websocket(
     clientHandler: $clientHandler,
 );
 
-$router = new Router($server, $errorHandler);
+$router = new Router($server, new NullLogger(), $errorHandler);
 $router->addRoute('GET', '/live', $websocket);
 $router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 

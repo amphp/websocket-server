@@ -5,7 +5,7 @@ namespace Amp\Websocket\Server;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\WebsocketClient;
 
 interface WebsocketClientFactory
@@ -17,6 +17,6 @@ interface WebsocketClientFactory
         Request $request,
         Response $response,
         Socket $socket,
-        ?CompressionContext $compressionContext = null,
+        ?WebsocketCompressionContext $compressionContext = null,
     ): WebsocketClient;
 }

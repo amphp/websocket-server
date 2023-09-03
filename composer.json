@@ -32,12 +32,12 @@
         "amphp/http": "^2-dev",
         "amphp/http-server": "^3",
         "amphp/socket": "^2",
-        "amphp/websocket": "^2",
+        "amphp/websocket": "^2-dev",
         "psr/log": "^1|^2|^3",
         "revolt/event-loop": "^1 || ^0.2.4"
     },
     "require-dev": {
-        "amphp/http-client": "^5",
+        "amphp/http-client": "^5-dev",
         "amphp/http-server-static-content": "^2",
         "amphp/http-server-router": "^2",
         "amphp/log": "^2",
@@ -47,8 +47,6 @@
         "phpunit/phpunit": "^9",
         "psalm/phar": "^5.4"
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "suggest": {
         "ext-zlib": "Required for compression"
     },

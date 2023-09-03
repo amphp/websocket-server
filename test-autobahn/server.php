@@ -36,7 +36,7 @@ $websocket = new Websocket(
     },
     clientFactory: new Rfc6455ClientFactory(
         heartbeatQueue: null,
-        rateLimiter: null,
+        rateLimit: null,
         parserFactory: new Rfc6455ParserFactory(
             validateUtf8: true,
             messageSizeLimit: \PHP_INT_MAX,

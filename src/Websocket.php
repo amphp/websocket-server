@@ -9,12 +9,11 @@ use Amp\Http\Server\Driver\UpgradedSocket;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Websocket\CloseCode;
-use Amp\Websocket\ClosedException;
-use Amp\Websocket\Compression\CompressionContext;
-use Amp\Websocket\Compression\CompressionContextFactory;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContextFactory;
 use Amp\Websocket\WebsocketClient;
-use Amp\Websocket\WebsocketClientMetadata;
+use Amp\Websocket\WebsocketCloseCode;
+use Amp\Websocket\WebsocketClosedException;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 
@@ -24,7 +23,7 @@ final class Websocket implements RequestHandler
     use ForbidSerialization;
 
     /**
-     * @param CompressionContextFactory|null $compressionContextFactory Use null to disable compression.
+     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Use null to disable compression.
      */
     public function __construct(
         private readonly PsrLogger $logger,
@@ -32,7 +31,7 @@ final class Websocket implements RequestHandler
         private readonly WebsocketClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
-        private readonly ?CompressionContextFactory $compressionContextFactory = null,
+        private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
     ) {
     }
 
@@ -77,7 +76,7 @@ final class Websocket implements RequestHandler
         UpgradedSocket $socket,
         Request $request,
         Response $response,
-        ?CompressionContext $compressionContext
+        ?WebsocketCompressionContext $compressionContext
     ): void {
         $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
 
@@ -113,39 +112,39 @@ final class Websocket implements RequestHandler
 
     private function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
-        $client->onClose(function (WebsocketClientMetadata $metadata): void {
+        $client->onClose(function (int $clientId, int $closeCode, string $closeReason, bool $closedByPeer): void {
             /** @psalm-suppress  RedundantCondition */
             \assert($this->logger->debug(\sprintf(
                 'Closed websocket connection #%d (code: %d) %s',
-                $metadata->id,
-                $metadata->closeCode ?? 0,
-                $metadata->closeReason ?? '',
+                $clientId,
+                $closeCode,
+                $closeReason,
             )) || true);
 
-            if (!$metadata->closedByPeer) {
+            if (!$closedByPeer) {
                 return;
             }
 
-            switch ($metadata->closeCode) {
-                case CloseCode::PROTOCOL_ERROR:
-                case CloseCode::UNACCEPTABLE_TYPE:
-                case CloseCode::POLICY_VIOLATION:
-                case CloseCode::INCONSISTENT_FRAME_DATA_TYPE:
-                case CloseCode::MESSAGE_TOO_LARGE:
-                case CloseCode::EXPECTED_EXTENSION_MISSING:
-                case CloseCode::BAD_GATEWAY:
+            switch ($closeCode) {
+                case WebsocketCloseCode::PROTOCOL_ERROR:
+                case WebsocketCloseCode::UNACCEPTABLE_TYPE:
+                case WebsocketCloseCode::POLICY_VIOLATION:
+                case WebsocketCloseCode::INCONSISTENT_FRAME_DATA_TYPE:
+                case WebsocketCloseCode::MESSAGE_TOO_LARGE:
+                case WebsocketCloseCode::EXPECTED_EXTENSION_MISSING:
+                case WebsocketCloseCode::BAD_GATEWAY:
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d) %s',
-                        $metadata->closeCode,
-                        $metadata->closeReason ?? '',
+                        $closeCode,
+                        $closeReason,
                     ));
             }
         });
 
         try {
             $this->clientHandler->handleClient($client, $request, $response);
-        } catch (ClosedException) {
-            // Ignore ClosedExceptions thrown from closing the client while streaming a message.
+        } catch (WebsocketClosedException) {
+            // Ignore WebsocketClosedException thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
             $this->logger->error(
                 \sprintf(
@@ -157,12 +156,12 @@ final class Websocket implements RequestHandler
                 ['exception' => $exception],
             );
 
-            $client->close(CloseCode::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
+            $client->close(WebsocketCloseCode::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
             return;
         }
 
         if (!$client->isClosed()) {
-            $client->close(CloseCode::NORMAL_CLOSE, 'Closing connection');
+            $client->close(WebsocketCloseCode::NORMAL_CLOSE, 'Closing connection');
         }
     }
 }

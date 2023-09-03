@@ -52,7 +52,7 @@ final class SendQueue
             [$deferredFuture, $data, $binary] = $writeQueue->dequeue();
 
             try {
-                $binary ? $client->sendBinary($data) : $client->send($data);
+                $binary ? $client->sendBinary($data) : $client->sendText($data);
                 $deferredFuture->complete();
             } catch (\Throwable $exception) {
                 $deferredFuture->error($exception);
