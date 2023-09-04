@@ -38,7 +38,6 @@ class WebsocketIntegrationTest extends TestCase
         $this->httpServer->stop();
     }
 
-
     /**
      * @param \Closure(WebsocketGateway, WebsocketClient):void $clientHandler
      */
