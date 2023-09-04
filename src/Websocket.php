@@ -14,6 +14,7 @@ use Amp\Websocket\Compression\WebsocketCompressionContextFactory;
 use Amp\Websocket\WebsocketClient;
 use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketClosedException;
+use Amp\Websocket\WebsocketCloseInfo;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 
@@ -112,20 +113,20 @@ final class Websocket implements RequestHandler
 
     private function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
-        $client->onClose(function (int $clientId, int $closeCode, string $closeReason, bool $closedByPeer): void {
+        $client->onClose(function (int $clientId, WebsocketCloseInfo $closeInfo): void {
             /** @psalm-suppress  RedundantCondition */
             \assert($this->logger->debug(\sprintf(
                 'Closed websocket connection #%d (code: %d) %s',
                 $clientId,
-                $closeCode,
-                $closeReason,
+                $closeInfo->getCode(),
+                $closeInfo->getReason(),
             )) || true);
 
-            if (!$closedByPeer) {
+            if (!$closeInfo->isByPeer()) {
                 return;
             }
 
-            switch ($closeCode) {
+            switch ($closeInfo->getCode()) {
                 case WebsocketCloseCode::PROTOCOL_ERROR:
                 case WebsocketCloseCode::UNACCEPTABLE_TYPE:
                 case WebsocketCloseCode::POLICY_VIOLATION:
@@ -135,8 +136,8 @@ final class Websocket implements RequestHandler
                 case WebsocketCloseCode::BAD_GATEWAY:
                     $this->logger->notice(\sprintf(
                         'Client initiated websocket close reporting error (code: %d) %s',
-                        $closeCode,
-                        $closeReason,
+                        $closeInfo->getCode(),
+                        $closeInfo->getReason(),
                     ));
             }
         });
