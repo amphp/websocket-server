@@ -43,9 +43,11 @@
         "amphp/log": "^2",
         "amphp/php-cs-fixer-config": "^2",
         "amphp/phpunit-util": "^3",
+        "amphp/websocket-client": "^2-dev",
         "league/climate": "^3",
         "phpunit/phpunit": "^9",
-        "psalm/phar": "^5.4"
+        "psalm/phar": "^5.4",
+        "colinodell/psr-testlogger": "^1.2"
     },
     "suggest": {
         "ext-zlib": "Required for compression"
