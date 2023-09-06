@@ -16,7 +16,7 @@ interface WebsocketClientHandler
      * ```
      * while ($message = $client->receive()) {
      *     $payload = $message->buffer();
-     *     $client->send('Message of length ' . strlen($payload) . ' received');
+     *     $client->sendText('Message of length ' . strlen($payload) . ' received');
      * }
      * ```
      *
