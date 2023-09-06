@@ -98,6 +98,7 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
 };
 
 $websocket = new Websocket(
+    httpServer: $server,
     logger: $logger,
     handshakeHandler: $handshakeHandler,
     clientHandler: $clientHandler,

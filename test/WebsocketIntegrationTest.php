@@ -47,6 +47,7 @@ class WebsocketIntegrationTest extends TestCase
         $gateway = new WebsocketClientGateway();
 
         $websocket = new Websocket(
+            httpServer: $httpServer,
             logger: $this->logger,
             handshakeHandler: new EmptyHandshakeHandler(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {

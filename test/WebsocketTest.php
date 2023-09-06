@@ -74,6 +74,7 @@ class WebsocketTest extends AsyncTestCase
         $httpServer = SocketHttpServer::createForDirectAccess($logger);
 
         $websocket = new Websocket(
+            httpServer: $httpServer,
             logger: $logger,
             handshakeHandler: new EmptyHandshakeHandler(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
@@ -119,7 +120,12 @@ class WebsocketTest extends AsyncTestCase
         $logger = new NullLogger;
         $server = SocketHttpServer::createForDirectAccess($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
-        $websocket = new Websocket($logger, $handshakeHandler, $this->createMock(WebsocketClientHandler::class));
+        $websocket = new Websocket(
+            httpServer: $server,
+            logger: $logger,
+            handshakeHandler: $handshakeHandler,
+            clientHandler: $this->createMock(WebsocketClientHandler::class),
+        );
         $server->start($websocket, $this->createMock(ErrorHandler::class));
 
         try {

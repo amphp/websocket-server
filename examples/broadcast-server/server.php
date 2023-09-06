@@ -56,7 +56,7 @@ $clientHandler = new class implements WebsocketClientHandler {
     }
 };
 
-$websocket = new Websocket($logger, $handshakeHandler, $clientHandler);
+$websocket = new Websocket($server, $logger, $handshakeHandler, $clientHandler);
 
 $router = new Router($server, new NullLogger(), $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);

@@ -4,8 +4,10 @@ namespace Amp\Websocket\Server;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
+use Amp\Future;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\Driver\UpgradedSocket;
+use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
@@ -17,16 +19,21 @@ use Amp\Websocket\WebsocketClosedException;
 use Amp\Websocket\WebsocketCloseInfo;
 use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
+use function Amp\async;
 
 final class Websocket implements RequestHandler
 {
     use ForbidCloning;
     use ForbidSerialization;
 
+    /** @var \WeakMap<WebsocketClient, UpgradedSocket> */
+    private \WeakMap $clients;
+
     /**
      * @param WebsocketCompressionContextFactory|null $compressionContextFactory Use null to disable compression.
      */
     public function __construct(
+        HttpServer $httpServer,
         private readonly PsrLogger $logger,
         private readonly WebsocketHandshakeHandler $handshakeHandler,
         private readonly WebsocketClientHandler $clientHandler,
@@ -34,6 +41,10 @@ final class Websocket implements RequestHandler
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
         private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
     ) {
+        /** @psalm-suppress PropertyTypeCoercion */
+        $this->clients = new \WeakMap();
+
+        $httpServer->onStop($this->onStop(...));
     }
 
     public function handleRequest(Request $request): Response
@@ -50,6 +61,7 @@ final class Websocket implements RequestHandler
             $response->removeHeader('connection');
             $response->removeHeader('upgrade');
             $response->removeHeader('sec-websocket-accept');
+
             return $response;
         }
 
@@ -66,9 +78,12 @@ final class Websocket implements RequestHandler
             }
         }
 
-        $response->upgrade(
-            fn (UpgradedSocket $socket) => $this->reapClient($socket, $request, $response, $compressionContext)
-        );
+        $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient(
+            socket: $socket,
+            request: $request,
+            response: $response,
+            compressionContext: $compressionContext,
+        ));
 
         return $response;
     }
@@ -100,13 +115,15 @@ final class Websocket implements RequestHandler
             }
         }
 
-        /** @psalm-suppress  RedundantCondition */
+        /** @psalm-suppress RedundantCondition */
         \assert($this->logger->debug(\sprintf(
             'Upgraded %s #%d to websocket connection #%d',
             $socket->getRemoteAddress()->toString(),
             $socket->getClient()->getId(),
             $client->getId(),
         )) || true);
+
+        $this->clients[$client] = $socket;
 
         EventLoop::queue($this->handleClient(...), $client, $request, $response);
     }
@@ -164,5 +181,18 @@ final class Websocket implements RequestHandler
         if (!$client->isClosed()) {
             $client->close(WebsocketCloseCode::NORMAL_CLOSE, 'Closing connection');
         }
+    }
+
+    private function onStop(): void
+    {
+        $futures = [];
+        foreach ($this->clients as $client => $socket) {
+            $futures[] = async($client->close(...), WebsocketCloseCode::GOING_AWAY, 'Server shutting down');
+        }
+
+        /** @psalm-suppress PropertyTypeCoercion */
+        $this->clients = new \WeakMap();
+
+        Future\awaitAll($futures);
     }
 }
