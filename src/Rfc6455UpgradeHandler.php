@@ -16,20 +16,8 @@ final class Rfc6455UpgradeHandler implements RequestHandler
     use ForbidCloning;
     use ForbidSerialization;
 
-    private readonly ErrorHandler $errorHandler;
-
-    public function __construct(?ErrorHandler $errorHandler = null)
+    public function __construct(private readonly ErrorHandler $errorHandler = new Internal\UpgradeErrorHandler())
     {
-        $this->errorHandler = $errorHandler
-            ?? new class implements ErrorHandler {
-                public function handleError(
-                    int $status,
-                    ?string $reason = null,
-                    ?Request $request = null
-                ): Response {
-                    return new Response($status, ['connection' => 'close']);
-                }
-            };
     }
 
     public function handleRequest(Request $request): Response
