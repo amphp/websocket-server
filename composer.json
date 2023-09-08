@@ -34,7 +34,7 @@
         "amphp/socket": "^2",
         "amphp/websocket": "^2",
         "psr/log": "^1|^2|^3",
-        "revolt/event-loop": "^1 || ^0.2.4"
+        "revolt/event-loop": "^1"
     },
     "require-dev": {
         "amphp/http-client": "^5-dev",
