@@ -8,6 +8,7 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
+/** @internal */
 final class UpgradeErrorHandler implements ErrorHandler
 {
     use ForbidCloning;
