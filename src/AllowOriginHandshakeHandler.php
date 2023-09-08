@@ -10,23 +10,23 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
-final class OriginHandshakeHandler implements WebsocketHandshakeHandler
+final class AllowOriginHandshakeHandler implements WebsocketHandshakeHandler
 {
     use ForbidCloning;
     use ForbidSerialization;
 
     /**
-     * @param list<string> $allowedOrigins
+     * @param list<string> $allowOrigins
      */
     public function __construct(
-        private readonly array $allowedOrigins,
+        private readonly array $allowOrigins,
         private readonly ErrorHandler $errorHandler = new DefaultErrorHandler(),
     ) {
     }
 
     public function handleHandshake(Request $request, Response $response): Response
     {
-        if (!\in_array($request->getHeader('origin'), $this->allowedOrigins, true)) {
+        if (!\in_array($request->getHeader('origin'), $this->allowOrigins, true)) {
             return $this->errorHandler->handleError(HttpStatus::FORBIDDEN, 'Origin forbidden', $request);
         }
 

@@ -37,7 +37,7 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
-use Amp\Websocket\Server\OriginHandshakeHandler;
+use Amp\Websocket\Server\AllowOriginHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketClientGateway;
 use Amp\Websocket\Server\WebsocketClientHandler;
@@ -61,7 +61,7 @@ $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $errorHandler = new DefaultErrorHandler();
 
-$handshakeHandler = new OriginHandshakeHandler(
+$handshakeHandler = new AllowOriginHandshakeHandler(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 

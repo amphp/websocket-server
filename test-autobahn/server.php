@@ -8,8 +8,8 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
-use Amp\Websocket\Server\EmptyHandshakeHandler;
 use Amp\Websocket\Server\Rfc6455ClientFactory;
+use Amp\Websocket\Server\UnrestrictedHandshakeHandler;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\WebsocketClient;
@@ -24,7 +24,7 @@ $server = SocketHttpServer::createForDirectAccess($logger);
 $websocket = new Websocket(
     httpServer: $server,
     logger: $logger,
-    handshakeHandler: new EmptyHandshakeHandler(),
+    handshakeHandler: new UnrestrictedHandshakeHandler(),
     clientHandler: new class implements WebsocketClientHandler {
         public function handleClient(WebsocketClient $client, Request $request, Response $response): void
         {

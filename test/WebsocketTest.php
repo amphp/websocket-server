@@ -76,7 +76,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $logger,
-            handshakeHandler: new EmptyHandshakeHandler(),
+            handshakeHandler: new UnrestrictedHandshakeHandler(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,

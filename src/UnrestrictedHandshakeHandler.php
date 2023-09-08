@@ -7,7 +7,7 @@ use Amp\ForbidSerialization;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
-final class EmptyHandshakeHandler implements WebsocketHandshakeHandler
+final class UnrestrictedHandshakeHandler implements WebsocketHandshakeHandler
 {
     use ForbidCloning;
     use ForbidSerialization;
