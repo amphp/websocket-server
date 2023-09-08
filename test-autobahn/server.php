@@ -19,7 +19,10 @@ use Psr\Log\NullLogger;
 
 $logger = new NullLogger();
 
+$server = SocketHttpServer::createForDirectAccess($logger);
+
 $websocket = new Websocket(
+    httpServer: $server,
     logger: $logger,
     handshakeHandler: new EmptyHandshakeHandler(),
     clientHandler: new class implements WebsocketClientHandler {
@@ -45,7 +48,6 @@ $websocket = new Websocket(
     ),
 );
 
-$server = SocketHttpServer::createForDirectAccess($logger);
 $server->expose(new Socket\InternetAddress("127.0.0.1", 9001));
 
 $server->start($websocket, new DefaultErrorHandler());
