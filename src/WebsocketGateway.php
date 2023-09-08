@@ -13,9 +13,10 @@ use Amp\Websocket\WebsocketClient;
  * sending messages to other clients.
  *
  * Messages sent via a gateway may arrive at the websocket client out of order of those sent directly using
- * {@see WebsocketClient::send()} or {@see WebsocketClient::sendBinary()}. If ordering of broadcast or multicast
- * messages must be maintained with messages sent only to individual clients, always use the {@see sendAsync()} and
- * {@see sendBinaryAsync()} methods on implementations of this interface to send to individual clients.
+ * {@see WebsocketClient::sendText()} or {@see WebsocketClient::sendBinary()}. If ordering of broadcast or multicast
+ * messages must be maintained with messages sent only to individual clients, always use the {@see self::sendText()}
+ * and {@see self::sendBinary()} methods on implementations of this interface to send to individual clients. Messages
+ * sent with these methods will be queued after any broadcasted or multicasted messages.
  */
 interface WebsocketGateway
 {
