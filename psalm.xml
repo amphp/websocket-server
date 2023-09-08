@@ -9,6 +9,7 @@
     <projectFiles>
         <directory name="examples"/>
         <directory name="src"/>
+        <directory name="test-autobahn"/>
         <ignoreFiles>
             <directory name="vendor"/>
         </ignoreFiles>

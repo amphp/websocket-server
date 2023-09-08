@@ -1,18 +1,18 @@
-<?php
+<?php declare(strict_types=1);
 
-require \dirname(__DIR__) . "/vendor/autoload.php";
+require dirname(__DIR__) . "/vendor/autoload.php";
 
 const REPORT_PATH = __DIR__ . "/reports/servers/index.json";
 
 $climate = new League\CLImate\CLImate;
 
-if (!\file_exists(REPORT_PATH)) {
+if (!file_exists(REPORT_PATH)) {
     $climate->red("Could not find autobahn test results json file");
     exit(1);
 }
 
-$report = \file_get_contents(REPORT_PATH);
-$report = \json_decode($report, true);
+$report = file_get_contents(REPORT_PATH);
+$report = json_decode($report, true);
 
 if (!isset($report["amphp-websocket-server"])) {
     $climate->red("Could not find result set for amphp-websocket-server");
@@ -21,7 +21,7 @@ if (!isset($report["amphp-websocket-server"])) {
 
 $report = $report["amphp-websocket-server"];
 
-\uksort($report, 'version_compare');
+uksort($report, 'version_compare');
 
 $climate->out("Autobahn test report:");
 
@@ -31,7 +31,7 @@ $failed = 0;
 $total = 0;
 
 foreach ($report as $testNumber => $result) {
-    $message = \sprintf("%9s: %s ", $testNumber, $result["behavior"]);
+    $message = sprintf("%9s: %s ", $testNumber, $result["behavior"]);
 
     switch ($result["behavior"]) {
         case "OK":
@@ -65,7 +65,7 @@ $climate->br();
 
 $other = $total;
 $total += $passed + $nonstrict + $failed;
-$counts = \sprintf(
+$counts = sprintf(
     "%d Total / %d Passed / %d Non-strict / %d Failed / %d Unimplemented or Informational",
     $total,
     $passed,
@@ -75,11 +75,11 @@ $counts = \sprintf(
 );
 
 if ($failed) {
-    $climate->backgroundRed()->black(\sprintf(" Tests failed: %s ", $counts));
+    $climate->backgroundRed()->black(sprintf(" Tests failed: %s ", $counts));
 } elseif ($nonstrict) {
-    $climate->backgroundYellow()->black(\sprintf(" Tests passed: %s ", $counts));
+    $climate->backgroundYellow()->black(sprintf(" Tests passed: %s ", $counts));
 } else {
-    $climate->backgroundGreen()->black(\sprintf(" Tests passed: %s ", $counts));
+    $climate->backgroundGreen()->black(sprintf(" Tests passed: %s ", $counts));
 }
 
 exit($failed === 0 ? 0 : 1);
