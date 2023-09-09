@@ -11,8 +11,6 @@ use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
-use Amp\Websocket\Compression\WebsocketCompressionContext;
-use Amp\Websocket\Compression\WebsocketCompressionContextFactory;
 use Amp\Websocket\WebsocketClient;
 use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketClosedException;
@@ -29,16 +27,12 @@ final class Websocket implements RequestHandler
     /** @var \WeakMap<WebsocketClient, true> */
     private \WeakMap $clients;
 
-    /**
-     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Use null to disable compression.
-     */
     public function __construct(
         HttpServer $httpServer,
         private readonly PsrLogger $logger,
         private readonly RequestHandler $acceptor,
         private readonly WebsocketClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
-        private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
     ) {
         /** @psalm-suppress PropertyTypeCoercion */
         $this->clients = new \WeakMap();
@@ -57,24 +51,10 @@ final class Websocket implements RequestHandler
             return $response;
         }
 
-        $compressionContext = null;
-        if ($this->compressionContextFactory) {
-            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
-
-            foreach ($extensions as $extension) {
-                if ($compressionContext = $this->compressionContextFactory->fromClientHeader($extension, $headerLine)) {
-                    /** @psalm-suppress PossiblyNullArgument */
-                    $response->setHeader('sec-websocket-extensions', $headerLine);
-                    break;
-                }
-            }
-        }
-
         $response->upgrade(fn (UpgradedSocket $socket) => $this->reapClient(
             socket: $socket,
             request: $request,
             response: $response,
-            compressionContext: $compressionContext,
         ));
 
         return $response;
@@ -84,9 +64,8 @@ final class Websocket implements RequestHandler
         UpgradedSocket $socket,
         Request $request,
         Response $response,
-        ?WebsocketCompressionContext $compressionContext
     ): void {
-        $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
+        $client = $this->clientFactory->createClient($request, $response, $socket);
 
         /** @psalm-suppress RedundantCondition */
         \assert($this->logger->debug(\sprintf(

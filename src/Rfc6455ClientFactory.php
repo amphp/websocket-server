@@ -8,7 +8,7 @@ use Amp\ForbidSerialization;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
-use Amp\Websocket\Compression\WebsocketCompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContextFactory;
 use Amp\Websocket\ConstantRateLimit;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketParserFactory;
@@ -23,7 +23,13 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
     use ForbidCloning;
     use ForbidSerialization;
 
+    /**
+     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Use null to disable compression.
+     * @param WebsocketHeartbeatQueue|null $heartbeatQueue Use null to disable automatic heartbeats (pings).
+     * @param WebsocketRateLimit|null $rateLimit Use null to disable client rate limits.
+     */
     public function __construct(
+        private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
         private readonly ?WebsocketHeartbeatQueue $heartbeatQueue = new PeriodicHeartbeatQueue(),
         private readonly ?WebsocketRateLimit $rateLimit = new ConstantRateLimit(),
         private readonly WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
@@ -36,7 +42,6 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
         Request $request,
         Response $response,
         Socket $socket,
-        ?WebsocketCompressionContext $compressionContext = null,
     ): WebsocketClient {
         if ($socket instanceof ResourceStream) {
             $socketResource = $socket->getResource();
@@ -55,6 +60,19 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
                     \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
                 } finally {
                     \restore_error_handler();
+                }
+            }
+        }
+
+        $compressionContext = null;
+        if ($this->compressionContextFactory) {
+            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
+
+            foreach ($extensions as $extension) {
+                if ($compressionContext = $this->compressionContextFactory->fromClientHeader($extension, $headerLine)) {
+                    /** @psalm-suppress PossiblyNullArgument */
+                    $response->setHeader('sec-websocket-extensions', $headerLine);
+                    break;
                 }
             }
         }
