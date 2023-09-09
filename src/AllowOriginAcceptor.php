@@ -7,10 +7,9 @@ use Amp\ForbidSerialization;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
-use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 
-final class AllowOriginAcceptor implements RequestHandler
+final class AllowOriginAcceptor implements WebsocketAcceptor
 {
     use ForbidCloning;
     use ForbidSerialization;
@@ -21,16 +20,16 @@ final class AllowOriginAcceptor implements RequestHandler
     public function __construct(
         private readonly array $allowOrigins,
         private readonly ErrorHandler $errorHandler = new Internal\UpgradeErrorHandler(),
-        private readonly RequestHandler $acceptor = new Rfc6455Acceptor(),
+        private readonly WebsocketAcceptor $acceptor = new Rfc6455Acceptor(),
     ) {
     }
 
-    public function handleRequest(Request $request): Response
+    public function handleHandshake(Request $request): Response
     {
         if (!\in_array($request->getHeader('origin'), $this->allowOrigins, true)) {
             return $this->errorHandler->handleError(HttpStatus::FORBIDDEN, 'Origin forbidden', $request);
         }
 
-        return $this->acceptor->handleRequest($request);
+        return $this->acceptor->handleHandshake($request);
     }
 }

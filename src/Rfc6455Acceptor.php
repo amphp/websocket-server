@@ -7,11 +7,10 @@ use Amp\ForbidSerialization;
 use Amp\Http\HttpStatus;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
-use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use function Amp\Websocket\generateAcceptFromKey;
 
-final class Rfc6455Acceptor implements RequestHandler
+final class Rfc6455Acceptor implements WebsocketAcceptor
 {
     use ForbidCloning;
     use ForbidSerialization;
@@ -20,31 +19,7 @@ final class Rfc6455Acceptor implements RequestHandler
     {
     }
 
-    /**
-     * Respond to websocket handshake requests.
-     *
-     * If a websocket application doesn't wish to impose any special constraints on the
-     * handshake it doesn't have to do anything beyond the request handling provided by this
-     * method. All valid websocket handshakes will be accepted. It is recommended to do
-     * validation of the connected client as part of the protocol implemented by the
-     * {@see WebsocketClientHandler}.
-     *
-     * Most web applications should check the `origin` header to restrict access,
-     * as websocket connections aren't subject to browser's same-origin-policy. See
-     * {@see AllowOriginAcceptor} for such an implementation.
-     *
-     * Another implementation may delegate to this class to accept the client, then validate
-     * the cookies of the request before returning the response provided by the method
-     * below, or returning an error response.
-     *
-     * The response provided by the upgrade handler is made available to {@see WebsocketClientHandler::handleClient()}.
-     *
-     * @param Request $request The HTTP request that instigated the handshake
-     *
-     * @return Response Return a response with a status code other than
-     * {@link HttpStatus::SWITCHING_PROTOCOLS} to deny the handshake request.
-     */
-    public function handleRequest(Request $request): Response
+    public function handleHandshake(Request $request): Response
     {
         if ($request->getMethod() !== 'GET') {
             $response = $this->errorHandler->handleError(HttpStatus::METHOD_NOT_ALLOWED, request: $request);

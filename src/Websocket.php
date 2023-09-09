@@ -30,7 +30,7 @@ final class Websocket implements RequestHandler
     public function __construct(
         HttpServer $httpServer,
         private readonly PsrLogger $logger,
-        private readonly RequestHandler $acceptor,
+        private readonly WebsocketAcceptor $acceptor,
         private readonly WebsocketClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
     ) {
@@ -42,7 +42,7 @@ final class Websocket implements RequestHandler
 
     public function handleRequest(Request $request): Response
     {
-        $response = $this->acceptor->handleRequest($request);
+        $response = $this->acceptor->handleHandshake($request);
 
         if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
             $response->removeHeader('sec-websocket-accept');

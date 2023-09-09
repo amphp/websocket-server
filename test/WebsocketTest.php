@@ -10,7 +10,6 @@ use Amp\Http\HttpStatus;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
-use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\PHPUnit\AsyncTestCase;
@@ -110,12 +109,12 @@ class WebsocketTest extends AsyncTestCase
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): void
     {
-        $upgradeHandler = $this->createMock(RequestHandler::class);
+        $acceptor = $this->createMock(WebsocketAcceptor::class);
 
         $delegateHandler = new Rfc6455Acceptor();
-        $upgradeHandler->expects(self::once())
-            ->method('handleRequest')
-            ->willReturnCallback($delegateHandler->handleRequest(...));
+        $acceptor->expects(self::once())
+            ->method('handleHandshake')
+            ->willReturnCallback($delegateHandler->handleHandshake(...));
 
         $logger = new NullLogger();
         $server = SocketHttpServer::createForDirectAccess($logger);
@@ -123,7 +122,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $server,
             logger: $logger,
-            acceptor: $upgradeHandler,
+            acceptor: $acceptor,
             clientHandler: $this->createMock(WebsocketClientHandler::class),
         );
         $server->start($websocket, $this->createMock(ErrorHandler::class));
