@@ -88,25 +88,6 @@ final class Websocket implements RequestHandler
     ): void {
         $client = $this->clientFactory->createClient($request, $response, $socket, $compressionContext);
 
-        $socketResource = $socket->getResource();
-
-        // Setting via stream API doesn't work and TLS streams are not supported
-        // once TLS is enabled
-        $isNodelayChangeSupported = \is_resource($socketResource)
-            && !isset(\stream_get_meta_data($socketResource)["crypto"])
-            && \extension_loaded('sockets')
-            && \defined('TCP_NODELAY');
-
-        if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
-            \set_error_handler(static fn () => true);
-            try {
-                // error suppression for sockets which don't support the option
-                \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
-            } finally {
-                \restore_error_handler();
-            }
-        }
-
         /** @psalm-suppress RedundantCondition */
         \assert($this->logger->debug(\sprintf(
             'Upgraded %s #%d to websocket connection #%d',

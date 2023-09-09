@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket\Server;
 
+use Amp\ByteStream\ResourceStream;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Http\Server\Request;
@@ -37,6 +38,27 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
         Socket $socket,
         ?WebsocketCompressionContext $compressionContext = null,
     ): WebsocketClient {
+        if ($socket instanceof ResourceStream) {
+            $socketResource = $socket->getResource();
+
+            // Setting via stream API doesn't work and TLS streams are not supported
+            // once TLS is enabled
+            $isNodelayChangeSupported = \is_resource($socketResource)
+                && !isset(\stream_get_meta_data($socketResource)["crypto"])
+                && \extension_loaded('sockets')
+                && \defined('TCP_NODELAY');
+
+            if ($isNodelayChangeSupported && ($sock = \socket_import_stream($socketResource))) {
+                \set_error_handler(static fn () => true);
+                try {
+                    // error suppression for sockets which don't support the option
+                    \socket_set_option($sock, \SOL_TCP, \TCP_NODELAY, 1);
+                } finally {
+                    \restore_error_handler();
+                }
+            }
+        }
+
         return new Rfc6455Client(
             socket: $socket,
             masked: false,
