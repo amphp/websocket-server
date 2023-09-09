@@ -26,7 +26,7 @@ final class Websocket implements RequestHandler
     use ForbidCloning;
     use ForbidSerialization;
 
-    /** @var \WeakMap<WebsocketClient, UpgradedSocket> */
+    /** @var \WeakMap<WebsocketClient, true> */
     private \WeakMap $clients;
 
     /**
@@ -96,7 +96,7 @@ final class Websocket implements RequestHandler
             $client->getId(),
         )) || true);
 
-        $this->clients[$client] = $socket;
+        $this->clients[$client] = true;
 
         EventLoop::queue($this->handleClient(...), $client, $request, $response);
     }
@@ -159,7 +159,7 @@ final class Websocket implements RequestHandler
     private function onStop(): void
     {
         $futures = [];
-        foreach ($this->clients as $client => $socket) {
+        foreach ($this->clients as $client => $unused) {
             $futures[] = async($client->close(...), WebsocketCloseCode::GOING_AWAY, 'Server shutting down');
         }
 
