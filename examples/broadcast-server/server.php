@@ -36,7 +36,7 @@ $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $errorHandler = new DefaultErrorHandler();
 
-$handshakeHandler = new AllowOriginAcceptor(
+$acceptor = new AllowOriginAcceptor(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 
@@ -56,7 +56,7 @@ $clientHandler = new class implements WebsocketClientHandler {
     }
 };
 
-$websocket = new Websocket($server, $logger, $handshakeHandler, $clientHandler);
+$websocket = new Websocket($server, $logger, $clientHandler, $acceptor);
 
 $router = new Router($server, new NullLogger(), $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);

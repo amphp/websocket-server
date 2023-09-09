@@ -24,7 +24,6 @@ $server = SocketHttpServer::createForDirectAccess($logger);
 $websocket = new Websocket(
     httpServer: $server,
     logger: $logger,
-    handshakeHandler: new UnrestrictedAcceptor(),
     clientHandler: new class implements WebsocketClientHandler {
         public function handleClient(WebsocketClient $client, Request $request, Response $response): void
         {

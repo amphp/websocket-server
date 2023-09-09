@@ -35,10 +35,9 @@ final class Websocket implements RequestHandler
     public function __construct(
         HttpServer $httpServer,
         private readonly PsrLogger $logger,
-        private readonly WebsocketAcceptor $handshakeHandler,
         private readonly WebsocketClientHandler $clientHandler,
+        private readonly RequestHandler $acceptor = new UnrestrictedAcceptor(),
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
-        private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),
         private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
     ) {
         /** @psalm-suppress PropertyTypeCoercion */
@@ -49,18 +48,11 @@ final class Websocket implements RequestHandler
 
     public function handleRequest(Request $request): Response
     {
-        $response = $this->upgradeHandler->handleRequest($request);
+        $response = $this->acceptor->handleRequest($request);
 
         if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
-            return $response;
-        }
-
-        $response = $this->handshakeHandler->handleHandshake($request, $response);
-
-        if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
-            $response->removeHeader('connection');
-            $response->removeHeader('upgrade');
             $response->removeHeader('sec-websocket-accept');
+            $response->setHeader('connection', 'close');
 
             return $response;
         }

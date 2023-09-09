@@ -10,6 +10,7 @@ use Amp\Http\HttpStatus;
 use Amp\Http\Server\Driver\Client as HttpClient;
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
+use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\PHPUnit\AsyncTestCase;
@@ -76,7 +77,6 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $logger,
-            handshakeHandler: new UnrestrictedAcceptor(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
@@ -109,22 +109,21 @@ class WebsocketTest extends AsyncTestCase
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): void
     {
-        $handshakeHandler = $this->createMock(WebsocketAcceptor::class);
+        $upgradeHandler = $this->createMock(RequestHandler::class);
 
-        $handshakeHandler->expects($status === HttpStatus::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
-            ->method('handleHandshake')
-            ->willReturnCallback(function (Request $request, Response $response): Response {
-                return $response;
-            });
+        $delegateHandler = new UnrestrictedAcceptor();
+        $upgradeHandler->expects(self::once())
+            ->method('handleRequest')
+            ->willReturnCallback($delegateHandler->handleRequest(...));
 
-        $logger = new NullLogger;
+        $logger = new NullLogger();
         $server = SocketHttpServer::createForDirectAccess($logger);
         $server->expose(new Socket\InternetAddress('127.0.0.1', 0));
         $websocket = new Websocket(
             httpServer: $server,
             logger: $logger,
-            handshakeHandler: $handshakeHandler,
             clientHandler: $this->createMock(WebsocketClientHandler::class),
+            acceptor: $upgradeHandler,
         );
         $server->start($websocket, $this->createMock(ErrorHandler::class));
 

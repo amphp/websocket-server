@@ -40,7 +40,7 @@ $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
 $errorHandler = new DefaultErrorHandler();
 
-$handshakeHandler = new AllowOriginAcceptor(
+$acceptor = new AllowOriginAcceptor(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
 
@@ -100,8 +100,8 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
 $websocket = new Websocket(
     httpServer: $server,
     logger: $logger,
-    handshakeHandler: $handshakeHandler,
     clientHandler: $clientHandler,
+    acceptor: $acceptor,
 );
 
 $router = new Router($server, new NullLogger(), $errorHandler);

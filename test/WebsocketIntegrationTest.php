@@ -49,7 +49,6 @@ class WebsocketIntegrationTest extends TestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $this->logger,
-            handshakeHandler: new UnrestrictedAcceptor(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
