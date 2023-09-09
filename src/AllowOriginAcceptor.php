@@ -15,7 +15,7 @@ final class AllowOriginAcceptor implements RequestHandler
     use ForbidCloning;
     use ForbidSerialization;
 
-    private readonly UnrestrictedAcceptor $acceptor;
+    private readonly Rfc6455Acceptor $acceptor;
 
     /**
      * @param list<string> $allowOrigins
@@ -24,7 +24,7 @@ final class AllowOriginAcceptor implements RequestHandler
         private readonly array $allowOrigins,
         private readonly ErrorHandler $errorHandler = new Internal\UpgradeErrorHandler(),
     ) {
-        $this->acceptor = new UnrestrictedAcceptor($errorHandler);
+        $this->acceptor = new Rfc6455Acceptor($errorHandler);
     }
 
     public function handleRequest(Request $request): Response

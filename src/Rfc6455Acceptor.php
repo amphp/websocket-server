@@ -11,7 +11,7 @@ use Amp\Http\Server\RequestHandler;
 use Amp\Http\Server\Response;
 use function Amp\Websocket\generateAcceptFromKey;
 
-final class UnrestrictedAcceptor implements RequestHandler
+final class Rfc6455Acceptor implements RequestHandler
 {
     use ForbidCloning;
     use ForbidSerialization;

@@ -62,7 +62,7 @@ class WebsocketIntegrationTest extends TestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
-            acceptor: new UnrestrictedAcceptor(),
+            acceptor: new Rfc6455Acceptor(),
         );
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));

@@ -90,7 +90,7 @@ class WebsocketTest extends AsyncTestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
-            acceptor: new UnrestrictedAcceptor(),
+            acceptor: new Rfc6455Acceptor(),
             clientFactory: $factory,
         );
 
@@ -112,7 +112,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $upgradeHandler = $this->createMock(RequestHandler::class);
 
-        $delegateHandler = new UnrestrictedAcceptor();
+        $delegateHandler = new Rfc6455Acceptor();
         $upgradeHandler->expects(self::once())
             ->method('handleRequest')
             ->willReturnCallback($delegateHandler->handleRequest(...));
