@@ -15,16 +15,14 @@ final class AllowOriginAcceptor implements RequestHandler
     use ForbidCloning;
     use ForbidSerialization;
 
-    private readonly Rfc6455Acceptor $acceptor;
-
     /**
      * @param list<string> $allowOrigins
      */
     public function __construct(
         private readonly array $allowOrigins,
         private readonly ErrorHandler $errorHandler = new Internal\UpgradeErrorHandler(),
+        private readonly RequestHandler $acceptor = new Rfc6455Acceptor(),
     ) {
-        $this->acceptor = new Rfc6455Acceptor($errorHandler);
     }
 
     public function handleRequest(Request $request): Response
