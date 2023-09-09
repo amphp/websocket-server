@@ -10,7 +10,7 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
-final class AllowOriginHandshakeHandler implements WebsocketHandshakeHandler
+final class AllowOriginAcceptor implements WebsocketAcceptor
 {
     use ForbidCloning;
     use ForbidSerialization;

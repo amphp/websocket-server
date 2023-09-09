@@ -35,7 +35,7 @@ final class Websocket implements RequestHandler
     public function __construct(
         HttpServer $httpServer,
         private readonly PsrLogger $logger,
-        private readonly WebsocketHandshakeHandler $handshakeHandler,
+        private readonly WebsocketAcceptor $handshakeHandler,
         private readonly WebsocketClientHandler $clientHandler,
         private readonly WebsocketClientFactory $clientFactory = new Rfc6455ClientFactory(),
         private readonly RequestHandler $upgradeHandler = new Rfc6455UpgradeHandler(),

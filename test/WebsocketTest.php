@@ -76,7 +76,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $logger,
-            handshakeHandler: new UnrestrictedHandshakeHandler(),
+            handshakeHandler: new UnrestrictedAcceptor(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
@@ -109,7 +109,7 @@ class WebsocketTest extends AsyncTestCase
      */
     public function testHandshake(Request $request, int $status, array $expectedHeaders = []): void
     {
-        $handshakeHandler = $this->createMock(WebsocketHandshakeHandler::class);
+        $handshakeHandler = $this->createMock(WebsocketAcceptor::class);
 
         $handshakeHandler->expects($status === HttpStatus::SWITCHING_PROTOCOLS ? $this->once() : $this->never())
             ->method('handleHandshake')

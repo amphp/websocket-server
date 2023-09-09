@@ -6,7 +6,7 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
-interface WebsocketHandshakeHandler
+interface WebsocketAcceptor
 {
     /**
      * Respond to websocket handshake requests.
@@ -14,11 +14,11 @@ interface WebsocketHandshakeHandler
      * If a websocket application doesn't wish to impose any special constraints on the
      * handshake it doesn't have to do anything in this method (other than return the
      * given Response object) and all handshakes will be automatically accepted. See
-     * {@see UnrestrictedHandshakeHandler} for such an implementation.
+     * {@see UnrestrictedAcceptor} for such an implementation.
      *
      * Most web applications should check the {@code origin} header to restrict access,
      * as websocket connections aren't subject to browser's same-origin-policy. See
-     * {@see AllowOriginHandshakeHandler} for such an implementation.
+     * {@see AllowOriginAcceptor} for such an implementation.
      *
      * This method provides an opportunity to set application-specific headers, including
      * cookies, on the websocket response. Although any non-101 status code can be used
