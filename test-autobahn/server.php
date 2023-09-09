@@ -9,6 +9,7 @@ use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Server\Rfc6455ClientFactory;
+use Amp\Websocket\Server\UnrestrictedAcceptor;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\WebsocketClient;
@@ -35,6 +36,7 @@ $websocket = new Websocket(
             }
         }
     },
+    acceptor: new UnrestrictedAcceptor(),
     clientFactory: new Rfc6455ClientFactory(
         heartbeatQueue: null,
         rateLimit: null,

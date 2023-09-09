@@ -90,6 +90,7 @@ class WebsocketTest extends AsyncTestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
+            acceptor: new UnrestrictedAcceptor(),
             clientFactory: $factory,
         );
 
