@@ -49,6 +49,7 @@ class WebsocketIntegrationTest extends TestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $this->logger,
+            acceptor: new Rfc6455Acceptor(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
@@ -62,7 +63,6 @@ class WebsocketIntegrationTest extends TestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
-            acceptor: new Rfc6455Acceptor(),
         );
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));

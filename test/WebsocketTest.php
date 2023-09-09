@@ -77,6 +77,7 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $httpServer,
             logger: $logger,
+            acceptor: new Rfc6455Acceptor(),
             clientHandler: new class($clientHandler, $gateway) implements WebsocketClientHandler {
                 public function __construct(
                     private readonly \Closure $clientHandler,
@@ -90,7 +91,6 @@ class WebsocketTest extends AsyncTestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
-            acceptor: new Rfc6455Acceptor(),
             clientFactory: $factory,
         );
 
@@ -123,8 +123,8 @@ class WebsocketTest extends AsyncTestCase
         $websocket = new Websocket(
             httpServer: $server,
             logger: $logger,
-            clientHandler: $this->createMock(WebsocketClientHandler::class),
             acceptor: $upgradeHandler,
+            clientHandler: $this->createMock(WebsocketClientHandler::class),
         );
         $server->start($websocket, $this->createMock(ErrorHandler::class));
 

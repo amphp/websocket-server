@@ -24,6 +24,7 @@ $server = SocketHttpServer::createForDirectAccess($logger);
 $websocket = new Websocket(
     httpServer: $server,
     logger: $logger,
+    acceptor: new Rfc6455Acceptor(),
     clientHandler: new class implements WebsocketClientHandler {
         public function handleClient(WebsocketClient $client, Request $request, Response $response): void
         {
@@ -36,7 +37,6 @@ $websocket = new Websocket(
             }
         }
     },
-    acceptor: new Rfc6455Acceptor(),
     clientFactory: new Rfc6455ClientFactory(
         heartbeatQueue: null,
         rateLimit: null,

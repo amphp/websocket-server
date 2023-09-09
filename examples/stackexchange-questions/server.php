@@ -100,8 +100,8 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
 $websocket = new Websocket(
     httpServer: $server,
     logger: $logger,
-    clientHandler: $clientHandler,
     acceptor: $acceptor,
+    clientHandler: $clientHandler,
 );
 
 $router = new Router($server, new NullLogger(), $errorHandler);
