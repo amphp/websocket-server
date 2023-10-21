@@ -4,7 +4,6 @@ namespace Amp\Websocket\Server;
 
 use Amp\DeferredFuture;
 use Amp\Http\Server\DefaultErrorHandler;
-use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
@@ -20,7 +19,7 @@ use function Amp\Websocket\Client\connect;
 class WebsocketIntegrationTest extends TestCase
 {
     private TestLogger $logger;
-    private HttpServer $httpServer;
+    private SocketHttpServer $httpServer;
     private \Closure $clientHandler;
 
     protected function setUp(): void
@@ -75,7 +74,7 @@ class WebsocketIntegrationTest extends TestCase
     {
         $deferred = new DeferredFuture();
 
-        $this->clientHandler = function (WebsocketGateway $gateway, WebsocketClient $client) use ($deferred) {
+        $this->clientHandler = function (WebsocketGateway $gateway, WebsocketClient $client) use ($deferred): void {
             $test = $client->receive();
 
             $deferred->complete();

@@ -14,6 +14,7 @@ use Amp\Http\Server\Response;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket;
+use Amp\Websocket\Compression\Rfc7692CompressionFactory;
 use Amp\Websocket\WebsocketClient;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Http\Message\UriInterface as PsrUri;
@@ -30,14 +31,14 @@ class WebsocketTest extends AsyncTestCase
     {
         \assert($client instanceof MockObject);
 
-        $factory = $this->createMock(WebsocketClientFactory::class);
-        $factory->method('createClient')
+        $clientFactory = $this->createMock(WebsocketClientFactory::class);
+        $clientFactory->method('createClient')
             ->willReturn($client);
 
         $deferred = new DeferredFuture;
 
         $webserver = $this->createWebsocketServer(
-            $factory,
+            $clientFactory,
             function (WebsocketGateway $gateway, WebsocketClient $client) use ($onConnect, $deferred): void {
                 $deferred->complete($onConnect($gateway, $client));
             }
@@ -66,7 +67,7 @@ class WebsocketTest extends AsyncTestCase
      * @param \Closure(WebsocketGateway, WebsocketClient):void $clientHandler
      */
     protected function createWebsocketServer(
-        WebsocketClientFactory $factory,
+        WebsocketClientFactory $clientFactory,
         \Closure $clientHandler,
         WebsocketGateway $gateway = new WebsocketClientGateway(),
     ): SocketHttpServer {
@@ -90,7 +91,7 @@ class WebsocketTest extends AsyncTestCase
                     ($this->clientHandler)($this->gateway, $client);
                 }
             },
-            clientFactory: $factory,
+            clientFactory: $clientFactory,
         );
 
         $httpServer->expose(new Socket\InternetAddress('127.0.0.1', 0));
@@ -124,6 +125,7 @@ class WebsocketTest extends AsyncTestCase
             logger: $logger,
             acceptor: $acceptor,
             clientHandler: $this->createMock(WebsocketClientHandler::class),
+            compressionFactory: new Rfc7692CompressionFactory(),
         );
         $server->start($websocket, $this->createMock(ErrorHandler::class));
 
@@ -217,6 +219,33 @@ class WebsocketTest extends AsyncTestCase
             $request,
             HttpStatus::BAD_REQUEST,
             ["sec-websocket-version" => ["13"]],
+        ];
+
+        // 8 ----- compression: valid header ------------------------------------------------------>
+        $request = $this->createRequest();
+        $request->setHeader("sec-websocket-extensions", "permessage-deflate; client_max_window_bits");
+        yield 'With Valid Compression' => [
+            $request,
+            HttpStatus::SWITCHING_PROTOCOLS,
+            [
+                "upgrade" => ["websocket"],
+                "connection" => ["upgrade"],
+                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+                "sec-websocket-extensions" => ["permessage-deflate; client_max_window_bits=15"],
+            ],
+        ];
+
+        // 9 ----- compression: invalid header ---------------------------------------------------->
+        $request = $this->createRequest();
+        $request->setHeader("sec-websocket-extensions", "permessage-deflate; client_max_window_bits=8;");
+        yield 'With Invalid Compression' => [
+            $request,
+            HttpStatus::SWITCHING_PROTOCOLS,
+            [
+                "upgrade" => ["websocket"],
+                "connection" => ["upgrade"],
+                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+            ],
         ];
     }
 

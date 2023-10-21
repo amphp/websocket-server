@@ -8,7 +8,7 @@ use Amp\ForbidSerialization;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use Amp\Socket\Socket;
-use Amp\Websocket\Compression\WebsocketCompressionContextFactory;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\ConstantRateLimit;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketParserFactory;
@@ -24,13 +24,10 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
     use ForbidSerialization;
 
     /**
-     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Deprecated. This argument is unused.
-     *      Compression is not supported in v3.x but will be in v4.x.
      * @param WebsocketHeartbeatQueue|null $heartbeatQueue Use null to disable automatic heartbeats (pings).
      * @param WebsocketRateLimit|null $rateLimit Use null to disable client rate limits.
      */
     public function __construct(
-        private readonly ?WebsocketCompressionContextFactory $compressionContextFactory = null,
         private readonly ?WebsocketHeartbeatQueue $heartbeatQueue = new PeriodicHeartbeatQueue(),
         private readonly ?WebsocketRateLimit $rateLimit = new ConstantRateLimit(),
         private readonly WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
@@ -43,6 +40,7 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
         Request $request,
         Response $response,
         Socket $socket,
+        ?WebsocketCompressionContext $compressionContext,
     ): WebsocketClient {
         if ($socket instanceof ResourceStream) {
             $socketResource = $socket->getResource();
@@ -69,6 +67,7 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
             socket: $socket,
             masked: false,
             parserFactory: $this->parserFactory,
+            compressionContext: $compressionContext,
             heartbeatQueue: $this->heartbeatQueue,
             rateLimit: $this->rateLimit,
             frameSplitThreshold: $this->frameSplitThreshold,

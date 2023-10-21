@@ -12,6 +12,7 @@ use Amp\Http\Server\StaticContent\DocumentRoot;
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Socket;
+use Amp\Websocket\Compression\Rfc7692CompressionFactory;
 use Amp\Websocket\Server\AllowOriginAcceptor;
 use Amp\Websocket\Server\Websocket;
 use Amp\Websocket\Server\WebsocketClientGateway;
@@ -34,8 +35,6 @@ $server = SocketHttpServer::createForDirectAccess($logger);
 $server->expose(new Socket\InternetAddress('127.0.0.1', 1337));
 $server->expose(new Socket\InternetAddress('[::1]', 1337));
 
-$errorHandler = new DefaultErrorHandler();
-
 $acceptor = new AllowOriginAcceptor(
     ['http://localhost:1337', 'http://127.0.0.1:1337', 'http://[::1]:1337'],
 );
@@ -56,7 +55,15 @@ $clientHandler = new class implements WebsocketClientHandler {
     }
 };
 
-$websocket = new Websocket($server, $logger, $acceptor, $clientHandler);
+$websocket = new Websocket(
+    httpServer: $server,
+    logger: $logger,
+    acceptor: $acceptor,
+    clientHandler: $clientHandler,
+    compressionFactory: new Rfc7692CompressionFactory(),
+);
+
+$errorHandler = new DefaultErrorHandler();
 
 $router = new Router($server, new NullLogger(), $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);
