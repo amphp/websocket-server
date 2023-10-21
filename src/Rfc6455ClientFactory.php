@@ -24,7 +24,8 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
     use ForbidSerialization;
 
     /**
-     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Use null to disable compression.
+     * @param WebsocketCompressionContextFactory|null $compressionContextFactory Deprecated. This argument is unused.
+     *      Compression is not supported in v3.x but will be in v4.x.
      * @param WebsocketHeartbeatQueue|null $heartbeatQueue Use null to disable automatic heartbeats (pings).
      * @param WebsocketRateLimit|null $rateLimit Use null to disable client rate limits.
      */
@@ -64,24 +65,10 @@ final class Rfc6455ClientFactory implements WebsocketClientFactory
             }
         }
 
-        $compressionContext = null;
-        if ($this->compressionContextFactory) {
-            $extensions = \array_map('trim', \explode(',', (string) $request->getHeader('sec-websocket-extensions')));
-
-            foreach ($extensions as $extension) {
-                if ($compressionContext = $this->compressionContextFactory->fromClientHeader($extension, $headerLine)) {
-                    /** @psalm-suppress PossiblyNullArgument */
-                    $response->setHeader('sec-websocket-extensions', $headerLine);
-                    break;
-                }
-            }
-        }
-
         return new Rfc6455Client(
             socket: $socket,
             masked: false,
             parserFactory: $this->parserFactory,
-            compressionContext: $compressionContext,
             heartbeatQueue: $this->heartbeatQueue,
             rateLimit: $this->rateLimit,
             frameSplitThreshold: $this->frameSplitThreshold,
