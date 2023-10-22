@@ -21,6 +21,8 @@ use Psr\Http\Message\UriInterface as PsrUri;
 use Psr\Log\NullLogger;
 use Revolt\EventLoop;
 use function Amp\delay;
+use function Amp\Websocket\generateAcceptFromKey;
+use function Amp\Websocket\generateKey;
 
 class WebsocketTest extends AsyncTestCase
 {
@@ -145,7 +147,7 @@ class WebsocketTest extends AsyncTestCase
     {
         $headers = [
             "host" => ["localhost"],
-            "sec-websocket-key" => ["x3JJHMbDL1EzLkh9GBhXDw=="],
+            "sec-websocket-key" => [generateKey()],
             "sec-websocket-version" => ["13"],
             "upgrade" => ["websocket"],
             "connection" => ["upgrade"],
@@ -178,7 +180,7 @@ class WebsocketTest extends AsyncTestCase
             [
                 "upgrade" => ["websocket"],
                 "connection" => ["upgrade"],
-                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+                "sec-websocket-accept" => [generateAcceptFromKey($request->getHeader('sec-websocket-key'))],
             ],
         ];
 
@@ -230,7 +232,7 @@ class WebsocketTest extends AsyncTestCase
             [
                 "upgrade" => ["websocket"],
                 "connection" => ["upgrade"],
-                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+                "sec-websocket-accept" => [generateAcceptFromKey($request->getHeader('sec-websocket-key'))],
                 "sec-websocket-extensions" => ["permessage-deflate; client_max_window_bits=15"],
             ],
         ];
@@ -244,7 +246,7 @@ class WebsocketTest extends AsyncTestCase
             [
                 "upgrade" => ["websocket"],
                 "connection" => ["upgrade"],
-                "sec-websocket-accept" => ["HSmrc0sMlYUkAGmm5OPpG2HaGWk="],
+                "sec-websocket-accept" => [generateAcceptFromKey($request->getHeader('sec-websocket-key'))],
             ],
         ];
     }
