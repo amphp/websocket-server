@@ -121,7 +121,7 @@ final class Websocket implements RequestHandler
     private function handleClient(WebsocketClient $client, Request $request, Response $response): void
     {
         $client->onClose(function (int $clientId, WebsocketCloseInfo $closeInfo): void {
-            /** @psalm-suppress  RedundantCondition */
+            /** @psalm-suppress RedundantCondition */
             \assert($this->logger->debug(\sprintf(
                 'Closed websocket connection #%d (code: %d) %s',
                 $clientId,
@@ -151,9 +151,12 @@ final class Websocket implements RequestHandler
 
         try {
             $this->clientHandler->handleClient($client, $request, $response);
-        } catch (WebsocketClosedException) {
-            // Ignore WebsocketClosedException thrown from closing the client while streaming a message.
         } catch (\Throwable $exception) {
+            if ($exception instanceof WebsocketClosedException && $client->isClosed()) {
+                // Ignore WebsocketClosedException thrown from closing the client while streaming a message.
+                return;
+            }
+
             $this->logger->error(
                 \sprintf(
                     "Unexpected %s thrown from %s::handleClient(), closing websocket connection from %s.",
