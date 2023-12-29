@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 // Note that this example requires amphp/http-client, amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
@@ -22,7 +22,6 @@ use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
-use Psr\Log\NullLogger;
 use Revolt\EventLoop;
 use function Amp\ByteStream\getStdout;
 
@@ -65,16 +64,16 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
             );
             $json = $response->getBody()->buffer();
 
-            $data = \json_decode($json, true);
+            $data = json_decode($json, true);
 
             if (!isset($data['items'])) {
                 return;
             }
 
-            foreach (\array_reverse($data['items']) as $question) {
+            foreach (array_reverse($data['items']) as $question) {
                 if ($this->newestQuestion === null || $question['question_id'] > $this->newestQuestion) {
                     $this->newestQuestion = $question['question_id'];
-                    $this->gateway->broadcastText(\json_encode($question))->ignore();
+                    $this->gateway->broadcastText(json_encode($question))->ignore();
                 }
             }
         });
@@ -104,7 +103,7 @@ $websocket = new Websocket(
     clientHandler: $clientHandler,
 );
 
-$router = new Router($server, new NullLogger(), $errorHandler);
+$router = new Router($server, $logger, $errorHandler);
 $router->addRoute('GET', '/live', $websocket);
 $router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 
@@ -113,6 +112,6 @@ $server->start($router, $errorHandler);
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
 
-$logger->info(\sprintf("Received signal %d, stopping HTTP server", $signal));
+$logger->info(sprintf("Received signal %d, stopping HTTP server", $signal));
 
 $server->stop();

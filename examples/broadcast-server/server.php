@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 // Note that this example requires amphp/http-server-router,
 // amphp/http-server-static-content and amphp/log to be installed.
@@ -20,7 +20,6 @@ use Amp\Websocket\Server\WebsocketClientHandler;
 use Amp\Websocket\Server\WebsocketGateway;
 use Amp\Websocket\WebsocketClient;
 use Monolog\Logger;
-use Psr\Log\NullLogger;
 use function Amp\ByteStream\getStdout;
 
 require __DIR__ . '/../../vendor/autoload.php';
@@ -50,7 +49,7 @@ $clientHandler = new class implements WebsocketClientHandler {
         $this->gateway->addClient($client);
 
         while ($message = $client->receive()) {
-            $this->gateway->broadcastText(\sprintf('%d: %s', $client->getId(), (string) $message))->ignore();
+            $this->gateway->broadcastText(sprintf('%d: %s', $client->getId(), (string) $message))->ignore();
         }
     }
 };
@@ -65,7 +64,7 @@ $websocket = new Websocket(
 
 $errorHandler = new DefaultErrorHandler();
 
-$router = new Router($server, new NullLogger(), $errorHandler);
+$router = new Router($server, $logger, $errorHandler);
 $router->addRoute('GET', '/broadcast', $websocket);
 $router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__ . '/public'));
 
@@ -74,6 +73,6 @@ $server->start($router, $errorHandler);
 // Await SIGINT or SIGTERM to be received.
 $signal = Amp\trapSignal([\SIGINT, \SIGTERM]);
 
-$logger->info(\sprintf("Received signal %d, stopping HTTP server", $signal));
+$logger->info(sprintf("Received signal %d, stopping HTTP server", $signal));
 
 $server->stop();
