@@ -29,13 +29,13 @@ Creating a `Websocket` endpoint requires the user to specify a number of paramet
 
 ### Accepting Client Connections
 
-Accepting client connections is performed by an instance of `WebsocketAcceptor`. This library provides two implementations:  and `AllowOriginAcceptor`
+Accepting client connections is performed by an instance of `WebsocketAcceptor`. This library provides two implementations:
 - `Rfc6455Acceptor`: Accepts client connections based on [RFC6455](https://datatracker.ietf.org/doc/html/rfc6455) with no further restrictions.
 - `AllowOriginAcceptor`: Requires the `"Origin"` header of the HTTP request to match one of the allowed origins provided to the constructor. Accepting the connection is then delegated to another `WebsocketAcceptor` implementation (`Rfc6455Acceptor` by default).
 
 ### Handling Client Connections
 
-Once established, a WebSocket connection is handled by an implementation of `WebsocketClientHandler`. This is where your WebSocket application logic will go.
+Once established, a WebSocket connection is handled by an implementation of `WebsocketClientHandler`. Your application logic will be within an implementation of this interface.
 
 `WebsocketClientHanler` has a single method which must be implemented, `handleClient()`.
 
@@ -49,7 +49,7 @@ public function handleClient(
 
 After accepting a client connection, `WebsocketClientHandler::handleClient()` is invoked with the `WebsocketClient` instance, as well as the `Request` and `Response` instances which were used to establish the connection.
 
-This method should not return until the client connection should be closed. This method generally should not throw an exception. Any exception thrown will close the connection with an `UNEXPECTED_SERVER_ERROR` error code (1011) and forward the exception to the HTTP server logger. There is one exception to this: `WebsocketClosedException`, which is thrown when receiving or sending a message to a connection fails due to the connection being closed. If `WebsocketClosedException` is thrown from `handleClient()`, the exception is ignored.
+This method should not return until the client connection should be closed. Exceptions should not be thrown from this method. Any exception thrown will close the connection with an `UNEXPECTED_SERVER_ERROR` error code (1011) and forward the exception to the HTTP server logger. There is one exception to this: `WebsocketClosedException`, which is thrown when receiving or sending a message to a connection fails due to the connection being closed. If `WebsocketClosedException` is thrown from `handleClient()`, the exception is ignored.
 
 ### Gateways
 
