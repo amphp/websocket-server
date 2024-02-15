@@ -53,11 +53,21 @@ final class Websocket implements RequestHandler
     {
         $response = $this->acceptor->handleHandshake($request);
 
-        if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
-            $response->removeHeader('sec-websocket-accept');
-            $response->setHeader('connection', 'close');
+        if ($request->getProtocolVersion() < 2) {
+            if ($response->getStatus() !== HttpStatus::SWITCHING_PROTOCOLS) {
+                $response->removeHeader('sec-websocket-accept');
+                $response->setHeader('connection', 'close');
 
-            return $response;
+                return $response;
+            }
+        } else {
+            if ($response->getStatus() >= 300 /* not an OK status */) {
+                return $response;
+            }
+            // Avoid having websocket handlers to take care of versions manually
+            if ($response->getStatus() === HttpStatus::SWITCHING_PROTOCOLS) {
+                $response->setStatus(HttpStatus::OK);
+            }
         }
 
         $compressionContext = $this->negotiateCompression($request, $response);
