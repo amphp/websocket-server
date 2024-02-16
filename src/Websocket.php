@@ -119,7 +119,7 @@ final class Websocket implements RequestHandler
         \assert($this->logger->debug(\sprintf(
             'Upgraded %s #%d to websocket connection #%d',
             $socket->getRemoteAddress()->toString(),
-            $socket->getClient()->getId(),
+            $request->getClient()->getId(),
             $client->getId(),
         )) || true);
 
