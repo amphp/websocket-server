@@ -37,7 +37,7 @@ Accepting client connections is performed by an instance of `WebsocketAcceptor`.
 
 Once established, a WebSocket connection is handled by an implementation of `WebsocketClientHandler`. Your application logic will be within an implementation of this interface.
 
-`WebsocketClientHanler` has a single method which must be implemented, `handleClient()`.
+`WebsocketClientHandler` has a single method which must be implemented, `handleClient()`.
 
 ```php
 public function handleClient(
