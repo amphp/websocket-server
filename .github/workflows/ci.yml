@@ -92,7 +92,7 @@ jobs:
 
       - name: Archive autobahn artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: autobahn-results
           retention-days: 1
