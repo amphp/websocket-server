@@ -69,7 +69,8 @@ final class Rfc6455Acceptor implements WebsocketAcceptor
             return $response;
         }
 
-        if (!$acceptKey = $request->getHeader('sec-websocket-key')) {
+        $acceptKey = $request->getHeader('sec-websocket-key');
+        if ($acceptKey === null) {
             $reason = 'Bad Request: "Sec-Websocket-Key" header required';
             return $this->errorHandler->handleError(HttpStatus::BAD_REQUEST, $reason, $request);
         }

@@ -2,6 +2,7 @@
 <psalm
     errorLevel="2"
     resolveFromConfigFile="true"
+    findUnusedCode="false"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
@@ -21,5 +22,20 @@
                 <directory name="src" />
             </errorLevel>
         </UnsupportedPropertyReferenceUsage>
+
+        <MissingOverrideAttribute>
+            <errorLevel type="suppress">
+                <directory name="examples" />
+                <directory name="src" />
+                <directory name="test-autobahn" />
+            </errorLevel>
+        </MissingOverrideAttribute>
+
+        <PossiblyFalseArgument>
+            <errorLevel type="suppress">
+                <directory name="examples" />
+                <directory name="test-autobahn" />
+            </errorLevel>
+        </PossiblyFalseArgument>
     </issueHandlers>
 </psalm>

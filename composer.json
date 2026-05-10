@@ -46,7 +46,7 @@
         "amphp/websocket-client": "^2",
         "league/climate": "^3",
         "phpunit/phpunit": "^9",
-        "psalm/phar": "^5.18",
+        "psalm/phar": "6.16.1",
         "colinodell/psr-testlogger": "^1.2"
     },
     "suggest": {

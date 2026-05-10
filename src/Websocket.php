@@ -84,7 +84,7 @@ final class Websocket implements RequestHandler
                 \assert(\is_string($headerLine), 'Compression context returned without header line');
 
                 $existingHeader = $response->getHeader('sec-websocket-extensions');
-                if ($existingHeader) {
+                if ($existingHeader !== null) {
                     $headerLine = $existingHeader . ', ' . $headerLine;
                 }
 

@@ -81,7 +81,7 @@ $clientHandler = new class($server) implements WebsocketClientHandler {
 
     private function onStop(): void
     {
-        if ($this->watcher) {
+        if ($this->watcher !== null) {
             EventLoop::cancel($this->watcher);
         }
     }
