@@ -9,6 +9,10 @@ use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 
+/**
+ * Rejects WebSocket upgrade requests whose {@code Origin} header does not match an allowed origin,
+ * then delegates accepted requests to another {@see WebsocketAcceptor} (defaults to {@see Rfc6455Acceptor}).
+ */
 final class AllowOriginAcceptor implements WebsocketAcceptor
 {
     use ForbidCloning;

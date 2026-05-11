@@ -18,6 +18,12 @@ use Amp\Websocket\WebsocketClient;
 use Amp\Websocket\WebsocketHeartbeatQueue;
 use Amp\Websocket\WebsocketRateLimit;
 
+/**
+ * Creates {@see Rfc6455Client} instances with configurable heartbeat, rate-limiting, and framing options.
+ *
+ * Also enables {@code TCP_NODELAY} on plain TCP sockets when the {@code sockets} extension is available,
+ * reducing latency for small messages.
+ */
 final class Rfc6455ClientFactory implements WebsocketClientFactory
 {
     use ForbidCloning;

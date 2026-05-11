@@ -8,6 +8,12 @@ use Amp\Future;
 use Amp\Websocket\WebsocketClient;
 use function Amp\async;
 
+/**
+ * Collects WebSocket clients and sends messages to them asynchronously via per-client send queues,
+ * ensuring that a slow consumer does not delay message delivery to other clients.
+ *
+ * Clients are automatically removed from the gateway when their connection is closed.
+ */
 final class WebsocketClientGateway implements WebsocketGateway
 {
     use ForbidCloning;

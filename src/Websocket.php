@@ -23,6 +23,11 @@ use Psr\Log\LoggerInterface as PsrLogger;
 use Revolt\EventLoop;
 use function Amp\async;
 
+/**
+ * HTTP {@see RequestHandler} that upgrades incoming requests to WebSocket connections.
+ *
+ * On server stop, all open WebSocket connections are closed with the {@see WebsocketCloseCode::GOING_AWAY} code.
+ */
 final class Websocket implements RequestHandler
 {
     use ForbidCloning;

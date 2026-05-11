@@ -8,6 +8,12 @@ use Amp\Socket\Socket;
 use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\WebsocketClient;
 
+/**
+ * Creates {@see WebsocketClient} instances after the HTTP upgrade response has been sent.
+ *
+ * Implement this interface to customise client creation, e.g. to wrap or configure the underlying socket.
+ * The default implementation is {@see Rfc6455ClientFactory}.
+ */
 interface WebsocketClientFactory
 {
     /**

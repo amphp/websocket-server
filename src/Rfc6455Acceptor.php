@@ -10,6 +10,10 @@ use Amp\Http\Server\Request;
 use Amp\Http\Server\Response;
 use function Amp\Websocket\generateAcceptFromKey;
 
+/**
+ * Performs the RFC 6455 WebSocket opening handshake, validating required headers and returning the
+ * {@code 101 Switching Protocols} upgrade response on success.
+ */
 final class Rfc6455Acceptor implements WebsocketAcceptor
 {
     use ForbidCloning;
