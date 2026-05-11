@@ -33,6 +33,8 @@ Accepting client connections is performed by an instance of `WebsocketAcceptor`.
 - `Rfc6455Acceptor`: Accepts client connections based on [RFC6455](https://datatracker.ietf.org/doc/html/rfc6455) with no further restrictions.
 - `AllowOriginAcceptor`: Requires the `"Origin"` header of the HTTP request to match one of the allowed origins provided to the constructor. Accepting the connection is then delegated to another `WebsocketAcceptor` implementation (`Rfc6455Acceptor` by default).
 
+Both `Rfc6455Acceptor` and `AllowOriginAcceptor` accept an optional `ErrorHandler` as a constructor argument, allowing you to customise the HTTP response returned when a connection is rejected (e.g. to return a JSON error body).
+
 ### Handling Client Connections
 
 Once established, a WebSocket connection is handled by an implementation of `WebsocketClientHandler`. Your application logic will be within an implementation of this interface.
@@ -51,13 +53,52 @@ After accepting a client connection, `WebsocketClientHandler::handleClient()` is
 
 This method should not return until the client connection should be closed. Exceptions should not be thrown from this method. Any exception thrown will close the connection with an `UNEXPECTED_SERVER_ERROR` error code (1011) and forward the exception to the HTTP server logger. There is one exception to this: `WebsocketClosedException`, which is thrown when receiving or sending a message to a connection fails due to the connection being closed. If `WebsocketClosedException` is thrown from `handleClient()`, the exception is ignored.
 
+### Receiving Messages
+
+Messages are received by iterating over the `WebsocketClient` instance or by calling `receive()` directly. The iterator (and `receive()`) returns `null` and exits cleanly when the connection is closed — no try/catch is needed for the normal close case.
+
+```php
+// Iterate over incoming messages until the connection closes
+foreach ($client as $message) {
+    $payload = $message->buffer();
+    $isBinary = $message->isBinary();
+    $client->sendText('Echo: ' . $payload);
+}
+```
+
+`WebsocketClosedException` is only thrown when the connection is closed while a send or receive operation is already in progress mid-message. It bubbles up through `handleClient()` and is silently swallowed by the `Websocket` handler.
+
 ### Gateways
 
 A `WebsocketGateway` provides a means of collecting WebSocket clients into related groups to allow broadcasting a single message efficiently (and asynchronously) to multiple clients. `WebsocketClientGateway` provided by this library may be used by one or more client handlers to group clients from one or more endpoints (or multiple may be used on a single endpoint if desired). See the [example server](#example-server) below for basic usage of a gateway in a client handler. Clients added to the gateway are automatically removed when the client connection is closed.
 
+The `WebsocketGateway` interface provides the following methods:
+
+- `broadcastText(string $data, array $excludedClientIds = [])` — send a UTF-8 text message to all connected clients, with an optional exclusion list.
+- `broadcastBinary(string $data, array $excludedClientIds = [])` — same as above for binary messages.
+- `multicastText(string $data, array $clientIds)` / `multicastBinary(...)` — send to a specific set of client IDs.
+- `sendText(string $data, int $clientId)` / `sendBinary(...)` — send to a single client via the gateway's send queue, guaranteeing ordering with any concurrent broadcast or multicast messages.
+- `getClients()` — returns an array of all currently connected `WebsocketClient` instances indexed by client ID.
+
+> **Ordering note:** Messages sent with `WebsocketClient::sendText()` / `sendBinary()` directly bypass the gateway's send queue. If you mix direct sends with gateway sends, message order is not guaranteed. Use the gateway's `sendText()`/`sendBinary()` methods when ordering relative to broadcasts matters.
+
 ### Compression
 
 Message compression may optionally be enabled on individual WebSocket endpoints by passing an instance of `WebsocketCompressionContextFactory` to the `Websocket` constructor. Currently, the only implementation available is `Rfc7692CompressionFactory` which implements compression based on [RFC-7692](https://datatracker.ietf.org/doc/html/rfc7692).
+
+### Customising the Client Factory
+
+By default, `Websocket` creates clients using `Rfc6455ClientFactory`. You can pass your own `Rfc6455ClientFactory` instance (or a custom `WebsocketClientFactory` implementation) to control low-level client behaviour:
+
+`Rfc6455ClientFactory` constructor parameters:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `$heartbeatQueue` | `PeriodicHeartbeatQueue` | Sends periodic pings to detect dead connections. Pass `null` to disable. |
+| `$rateLimit` | `ConstantRateLimit` | Limits the rate of incoming messages per client. Pass `null` to disable. |
+| `$parserFactory` | `Rfc6455ParserFactory` | Factory for the low-level frame parser. |
+| `$frameSplitThreshold` | `Rfc6455Client::DEFAULT_FRAME_SPLIT_THRESHOLD` | Large messages are split into frames of at most this many bytes. |
+| `$closePeriod` | `Rfc6455Client::DEFAULT_CLOSE_PERIOD` | Seconds to wait for a close frame from the client before forcefully closing the socket. |
 
 ### Example Server
 
