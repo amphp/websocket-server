@@ -1,7 +1,7 @@
 # amphp/websocket-server
 
 AMPHP is a collection of event-driven libraries for PHP designed with fibers and concurrency in mind.
-This library provides a [`RequestHandler`](https://amphp.org/http-server/classes/request-handler) to easily handle WebSocket connections using [`amphp/http-server`](https://github.com/amphp/http-server).
+This library provides a [`RequestHandler`](https://amphp.org/http-server#requesthandler) to easily handle WebSocket connections using [`amphp/http-server`](https://github.com/amphp/http-server).
 
 ## Requirements
 
